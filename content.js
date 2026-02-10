@@ -1,11 +1,17 @@
-// content.js - Superbuy Sync met Duplicaat Check
-
-let secretKey = 'reseller123'; // MOET MATCHEN MET JE .ENV
-let dashboardUrl = 'http://127.0.0.1:8000'; // JOUW LARAVEL URL
+// content.js - Superbuy Sync met Storage Settings
 
 // Globale variabelen
 let scannedItems = [];
 let isModalOpen = false;
+
+// Helper: Haal instellingen op uit Chrome Storage
+async function getSettings() {
+    return new Promise((resolve) => {
+        chrome.storage.sync.get(['dashboardUrl', 'secretKey'], (items) => {
+            resolve(items);
+        });
+    });
+}
 
 // 1. Start de knop injectie
 window.addEventListener('load', () => attemptInject());
@@ -15,6 +21,7 @@ const observer = new MutationObserver(() => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 function attemptInject() {
+    // Zoek naar een geschikte plek voor de knop (titel balk of header)
     const target = document.querySelector('.mod-title') || document.querySelector('.user-title') || document.querySelector('h3');
     const table = document.querySelector('table');
 
@@ -123,13 +130,17 @@ async function runScan(multiPage) {
 
             const itemsOnPage = scrapeDOM(doc);
             
+            // Voeg alleen unieke items toe
             itemsOnPage.forEach(item => {
                 if (!scannedItems.find(x => x.orderNo === item.orderNo && x.title === item.title)) {
                     scannedItems.push(item);
                 }
             });
 
+            // Stop als er geen items meer gevonden zijn op deze pagina
             if (itemsOnPage.length === 0 && i > 1) break;
+            
+            // Kleine pauze om de server niet te overbelasten
             if (multiPage) await new Promise(r => setTimeout(r, 800)); 
 
         } catch (e) {
@@ -137,7 +148,7 @@ async function runScan(multiPage) {
         }
     }
 
-    // B. Checken op de server (NIEUW)
+    // B. Checken op de server (NIEUW: Eerst settings checken)
     if (scannedItems.length > 0) {
         statusLabel.innerText = `Controleren op duplicaten...`;
         await checkDuplications();
@@ -148,17 +159,26 @@ async function runScan(multiPage) {
 }
 
 async function checkDuplications() {
+    const settings = await getSettings();
+
+    // Check of settings bestaan
+    if (!settings.dashboardUrl || !settings.secretKey) {
+        console.warn("⚠️ Geen instellingen gevonden. Duplicaat check overgeslagen.");
+        document.getElementById('sb-status').innerText = "⚠️ Stel URL & Secret in bij opties!";
+        return;
+    }
+
     try {
         const orderNos = scannedItems.map(i => i.orderNo);
         
-        const response = await fetch(`${dashboardUrl}/superbuy/check-items`, {
+        const response = await fetch(`${settings.dashboardUrl}/superbuy/check-items`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
+                // 'X-Requested-With': 'XMLHttpRequest' // Kan soms CORS issues geven, mag weg indien nodig
             },
             body: JSON.stringify({ 
-                secret: secretKey,
+                secret: settings.secretKey,
                 order_nos: orderNos 
             })
         });
@@ -176,6 +196,7 @@ async function checkDuplications() {
         }
     } catch (e) {
         console.error("Kon duplicaten niet checken:", e);
+        document.getElementById('sb-status').innerText = "⚠️ Kon niet verbinden met server.";
     }
 }
 
@@ -326,19 +347,26 @@ async function sendToLaravel() {
         return;
     }
 
+    // Haal settings op voordat we beginnen
+    const settings = await getSettings();
+    if (!settings.dashboardUrl || !settings.secretKey) {
+        alert("⚠️ Oeps! Je hebt nog geen URL en Secret ingesteld.\n\nGa naar de extensie instellingen (rechtermuisknop op icoon -> Opties) en vul deze in.");
+        return;
+    }
+
     btn.innerText = "Bezig met verzenden...";
     btn.disabled = true;
     btn.style.background = "#f59e0b";
 
     try {
-        const response = await fetch(`${dashboardUrl}/superbuy/import-extension`, {
+        const response = await fetch(`${settings.dashboardUrl}/superbuy/import-extension`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
+                // 'X-Requested-With': 'XMLHttpRequest'
             },
             body: JSON.stringify({ 
-                secret: secretKey,
+                secret: settings.secretKey,
                 items: selected 
             })
         });
@@ -358,7 +386,7 @@ async function sendToLaravel() {
         console.error(e);
         btn.innerText = "❌ Fout";
         btn.style.background = "#ef4444";
-        alert("Fout: " + e.message);
+        alert("Fout bij importeren: " + e.message);
         btn.disabled = false;
     }
 }
