@@ -130,17 +130,25 @@ async function runScan(multiPage) {
 
             const itemsOnPage = scrapeDOM(doc);
             
-            // Voeg alleen unieke items toe
+            // Voeg alleen unieke items toe (FIXED: Betere uniekheidscheck op subId)
             itemsOnPage.forEach(item => {
-                if (!scannedItems.find(x => x.orderNo === item.orderNo && x.title === item.title)) {
+                const isDuplicate = scannedItems.some(x => {
+                    // 1. Als we een uniek SubID (DI...) hebben, gebruik dat
+                    if (x.subId && item.subId) {
+                        return x.subId === item.subId;
+                    }
+                    // 2. Anders: check OrderNo + Title + Options (variant)
+                    return x.orderNo === item.orderNo && 
+                           x.title === item.title && 
+                           x.options === item.options;
+                });
+
+                if (!isDuplicate) {
                     scannedItems.push(item);
                 }
             });
 
-            // Stop als er geen items meer gevonden zijn op deze pagina
             if (itemsOnPage.length === 0 && i > 1) break;
-            
-            // Kleine pauze om de server niet te overbelasten
             if (multiPage) await new Promise(r => setTimeout(r, 800)); 
 
         } catch (e) {
@@ -148,7 +156,7 @@ async function runScan(multiPage) {
         }
     }
 
-    // B. Checken op de server (NIEUW: Eerst settings checken)
+    // B. Checken op de server
     if (scannedItems.length > 0) {
         statusLabel.innerText = `Controleren op duplicaten...`;
         await checkDuplications();
@@ -161,36 +169,36 @@ async function runScan(multiPage) {
 async function checkDuplications() {
     const settings = await getSettings();
 
-    // Check of settings bestaan
     if (!settings.dashboardUrl || !settings.secretKey) {
-        console.warn("⚠️ Geen instellingen gevonden. Duplicaat check overgeslagen.");
+        console.warn("⚠️ Geen instellingen gevonden.");
         document.getElementById('sb-status').innerText = "⚠️ Stel URL & Secret in bij opties!";
         return;
     }
 
     try {
-        const orderNos = scannedItems.map(i => i.orderNo);
-        
+        // We sturen nu de Sub IDs mee (DI...)
+        // Dit lost de bug op dat hij hele orders markeert als ze hetzelfde ordernummer hebben
+        const checkIds = scannedItems.map(i => i.subId).filter(id => id);
+
         const response = await fetch(`${settings.dashboardUrl}/superbuy/check-items`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // 'X-Requested-With': 'XMLHttpRequest' // Kan soms CORS issues geven, mag weg indien nodig
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 secret: settings.secretKey,
-                order_nos: orderNos 
+                order_nos: scannedItems.map(i => i.orderNo), // Backup voor legacy
+                sub_ids: checkIds // NIEUW: Stuur specifieke ID's
             })
         });
 
         const data = await response.json();
         
         if (data.existing && Array.isArray(data.existing)) {
-            // Markeer items die bestaan
             scannedItems.forEach(item => {
-                if (data.existing.includes(item.orderNo)) {
+                // BUGFIX: Check of het SPECIFIEKE Sub ID (DI...) bestaat
+                // De server moet dus een lijst met DI-nummers teruggeven
+                if (item.subId && data.existing.includes(item.subId)) {
                     item.exists = true;
-                    item.selected = false; // Automatisch deselecteren
+                    item.selected = false;
                 }
             });
         }
@@ -222,6 +230,10 @@ function scrapeDOM(doc) {
             const priceText = Array.from(tr.querySelectorAll('td')).find(td => /[\d.,]+/.test(td.innerText) && (td.innerText.includes('￥') || td.innerText.includes('$') || td.innerText.includes('€')))?.innerText || "0";
             const price = priceText.match(/[\d.,]+/)?.[0] || "0";
 
+            // NIEUW: Probeer het unieke DI nummer te vinden (staat vaak onder de foto of in de tekst)
+            const subIdMatch = tr.innerText.match(/(DI\d+)/);
+            const subId = subIdMatch ? subIdMatch[0] : "";
+
             const qcPhotos = [];
             tr.querySelectorAll('.pic-list li').forEach(li => {
                 const link = li.querySelector('a.lookPic'); 
@@ -244,6 +256,7 @@ function scrapeDOM(doc) {
 
             items.push({
                 orderNo,
+                subId: subId, // Belangrijk voor duplicaat check
                 title: titleEl.innerText.trim(),
                 link: titleEl.href,
                 image: tr.querySelector('img')?.src || "",
@@ -252,7 +265,7 @@ function scrapeDOM(doc) {
                 price: price,
                 qcPhotos: qcPhotos,
                 selected: true,
-                exists: false // Standaard false
+                exists: false 
             });
         });
     });
@@ -277,7 +290,6 @@ function renderList() {
         const tr = document.createElement('tr');
         tr.style.borderBottom = "1px solid #f3f4f6";
         
-        // Styling voor bestaande items (beetje vervaagd)
         if (item.exists) {
             tr.style.opacity = "0.6";
             tr.style.background = "#f9fafb";
@@ -287,7 +299,6 @@ function renderList() {
             ? `<span style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">📸 ${item.qcPhotos.length}</span>` 
             : ``;
             
-        // Status label of "Bestaat al" label
         let statusHtml = `<div style="color:${item.status.includes('Warehouse') ? 'green' : 'orange'}">${item.status}</div>`;
         if (item.exists) {
             statusHtml = `<div style="color:#ef4444; font-weight:bold;">⚠️ Al in voorraad</div>`;
@@ -303,6 +314,7 @@ function renderList() {
             <td style="padding:10px; max-width:250px;">
                 <div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${item.title}">${item.title}</div>
                 <div style="font-size:0.8rem; color:#6b7280;">Order: ${item.orderNo}</div>
+                <div style="font-size:0.75rem; color:#9ca3af;">${item.subId || ''}</div>
             </td>
             <td style="padding:10px; font-size:0.85rem; color:#4b5563;">
                 <div style="margin-bottom:4px;">${qcBadge}</div>
@@ -326,7 +338,6 @@ function renderList() {
 }
 
 function toggleAll(checked) {
-    // Selecteer alleen items die NIET bestaan
     scannedItems.forEach(i => {
         if (!i.exists) i.selected = checked;
     });
@@ -347,7 +358,6 @@ async function sendToLaravel() {
         return;
     }
 
-    // Haal settings op voordat we beginnen
     const settings = await getSettings();
     if (!settings.dashboardUrl || !settings.secretKey) {
         alert("⚠️ Oeps! Je hebt nog geen URL en Secret ingesteld.\n\nGa naar de extensie instellingen (rechtermuisknop op icoon -> Opties) en vul deze in.");
@@ -361,10 +371,7 @@ async function sendToLaravel() {
     try {
         const response = await fetch(`${settings.dashboardUrl}/superbuy/import-extension`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // 'X-Requested-With': 'XMLHttpRequest'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 secret: settings.secretKey,
                 items: selected 
