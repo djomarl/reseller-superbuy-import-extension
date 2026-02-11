@@ -28,10 +28,36 @@ function attemptInject() {
     if (target && table && !document.getElementById('sb-sync-trigger')) {
         const btn = document.createElement('button');
         btn.id = 'sb-sync-trigger';
-        btn.innerHTML = "🚀 Super Sync";
-        btn.style.cssText = "background:#10b981; color:white; padding:8px 16px; border-radius:6px; border:none; font-weight:bold; cursor:pointer; margin-left:15px; box-shadow:0 4px 6px rgba(0,0,0,0.1); transition: transform 0.1s; vertical-align: middle;";
-        btn.onmouseover = () => btn.style.transform = "scale(1.05)";
-        btn.onmouseout = () => btn.style.transform = "scale(1)";
+        btn.innerHTML = `
+            <span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">🚀</span> 
+            <span style="vertical-align: middle;">Super Sync</span>
+        `;
+        // Verbeterde styling voor de inject knop
+        btn.style.cssText = `
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white; 
+            padding: 8px 20px; 
+            border-radius: 99px; 
+            border: none; 
+            font-weight: 600; 
+            cursor: pointer; 
+            margin-left: 15px; 
+            box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2); 
+            transition: all 0.2s ease; 
+            vertical-align: middle;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            letter-spacing: 0.025em;
+        `;
+        
+        btn.onmouseover = () => {
+            btn.style.transform = "translateY(-1px) scale(1.02)";
+            btn.style.boxShadow = "0 10px 15px -3px rgba(16, 185, 129, 0.4), 0 4px 6px -2px rgba(16, 185, 129, 0.2)";
+        };
+        btn.onmouseout = () => {
+            btn.style.transform = "translateY(0) scale(1)";
+            btn.style.boxShadow = "0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2)";
+        };
+        
         btn.onclick = openModal;
         target.appendChild(btn);
     }
@@ -42,45 +68,89 @@ function openModal() {
     if (isModalOpen) return;
     isModalOpen = true;
 
+    // Injecteer CSS animaties en classes
+    if (!document.getElementById('sb-custom-styles')) {
+        const style = document.createElement('style');
+        style.id = 'sb-custom-styles';
+        style.innerHTML = `
+            @keyframes sb-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes sb-slideUp { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+            .sb-btn { transition: all 0.2s; position: relative; overflow: hidden; }
+            .sb-btn:hover { transform: translateY(-1px); filter: brightness(110%); }
+            .sb-btn:active { transform: translateY(0); filter: brightness(95%); }
+            .sb-row-hover:hover { background-color: #f3f4f6 !important; }
+            .sb-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #10b981; }
+            
+            /* Scrollbar styling */
+            #sb-items-container::-webkit-scrollbar { width: 8px; }
+            #sb-items-container::-webkit-scrollbar-track { background: #f1f1f1; }
+            #sb-items-container::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+            #sb-items-container::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        `;
+        document.head.appendChild(style);
+    }
+
     const overlay = document.createElement('div');
     overlay.id = 'sb-modal-overlay';
-    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; display:flex; justify-content:center; align-items:center; backdrop-filter: blur(2px);";
+    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(17, 24, 39, 0.7); z-index:99999; display:flex; justify-content:center; align-items:center; backdrop-filter: blur(4px); animation: sb-fadeIn 0.2s ease-out;";
     
     const modal = document.createElement('div');
-    modal.style.cssText = "background:white; width:90%; max-width:900px; height:85%; border-radius:12px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1); display:flex; flex-direction:column; overflow:hidden; font-family: sans-serif;";
+    modal.style.cssText = "background:white; width:90%; max-width:1000px; height:85%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; animation: sb-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);";
     
     modal.innerHTML = `
-        <div style="padding:20px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; background:#f9fafb;">
-            <h2 style="margin:0; font-size:1.25rem; color:#111827;">📦 Superbuy Import</h2>
-            <button id="sb-close-btn" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#6b7280;">&times;</button>
+        <div style="padding:24px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; background: linear-gradient(to right, #ffffff, #f9fafb);">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:1.5rem;">📦</span>
+                <div>
+                    <h2 style="margin:0; font-size:1.25rem; font-weight:700; color:#111827; letter-spacing: -0.01em;">Superbuy Import</h2>
+                    <p style="margin:2px 0 0 0; font-size:0.85rem; color:#6b7280;">Synchroniseer je orders naar het dashboard</p>
+                </div>
+            </div>
+            <button id="sb-close-btn" class="sb-btn" style="background:rgba(229, 231, 235, 0.5); border:none; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; color:#4b5563; display:flex; align-items:center; justify-content:center;">&times;</button>
         </div>
         
-        <div id="sb-actions" style="padding:20px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; gap:10px; flex-wrap:wrap;">
-            <button id="sb-scan-page" style="padding:8px 16px; background:#3b82f6; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:500;">📄 Scan Huidige Pagina</button>
-            <button id="sb-scan-all" style="padding:8px 16px; background:#6366f1; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:500;">📚 Scan Pagina 1-5</button>
-            <span id="sb-status" style="margin-left:auto; display:flex; align-items:center; color:#6b7280; font-size:0.9rem;">Klaar voor start...</span>
+        <div id="sb-actions" style="padding:20px 24px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <button id="sb-scan-page" class="sb-btn" style="padding:10px 20px; background:#3b82f6; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display:flex; align-items:center; gap:6px;">
+                <span>📄</span> Scan Huidige Pagina
+            </button>
+            <button id="sb-scan-all" class="sb-btn" style="padding:10px 20px; background:#6366f1; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display:flex; align-items:center; gap:6px;">
+                <span>📚</span> Scan Pagina 1-5
+            </button>
+            <div style="height:24px; width:1px; background:#e5e7eb; margin:0 8px;"></div>
+            <span id="sb-status" style="display:flex; align-items:center; color:#6b7280; font-size:0.9rem; font-weight:500; background:#f3f4f6; padding:6px 12px; border-radius:99px;">
+                <span>👋 Klaar voor start...</span>
+            </span>
         </div>
 
-        <div style="flex:1; overflow-y:auto; padding:0; background:#f9fafb;">
+        <div id="sb-items-container" style="flex:1; overflow-y:auto; padding:0; background:#f9fafb;">
             <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
-                <thead style="background:#f3f4f6; position:sticky; top:0; z-index:10; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <thead style="background:#f9fafb; position:sticky; top:0; z-index:10; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);">
                     <tr>
-                        <th style="padding:12px; text-align:left; width:40px;"><input type="checkbox" id="sb-toggle-all" checked></th>
-                        <th style="padding:12px; text-align:left; width:80px;">Foto</th>
-                        <th style="padding:12px; text-align:left;">Product</th>
-                        <th style="padding:12px; text-align:left;">Info</th>
-                        <th style="padding:12px; text-align:right;">Prijs</th>
+                        <th style="padding:16px 24px 16px 24px; text-align:left; width:40px; border-bottom: 1px solid #e5e7eb;"><input type="checkbox" id="sb-toggle-all" checked class="sb-checkbox"></th>
+                        <th style="padding:16px 12px; text-align:left; width:80px; border-bottom: 1px solid #e5e7eb; color:#6b7280; font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Foto</th>
+                        <th style="padding:16px 12px; text-align:left; border-bottom: 1px solid #e5e7eb; color:#6b7280; font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Product Details</th>
+                        <th style="padding:16px 12px; text-align:left; border-bottom: 1px solid #e5e7eb; color:#6b7280; font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Status Info</th>
+                        <th style="padding:16px 24px 16px 12px; text-align:right; border-bottom: 1px solid #e5e7eb; color:#6b7280; font-weight:600; font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Prijs</th>
                     </tr>
                 </thead>
                 <tbody id="sb-items-list" style="background:white;">
-                    <tr><td colspan="5" style="padding:40px; text-align:center; color:#9ca3af;">Nog geen items gescand.</td></tr>
+                    <tr><td colspan="5" style="padding:60px; text-align:center; color:#9ca3af;">
+                        <div style="font-size:3rem; margin-bottom:10px; opacity:0.3;">🔍</div>
+                        <div>Nog geen items gescand.</div>
+                        <div style="font-size:0.85rem; margin-top:5px; opacity:0.7;">Klik op een knop hierboven om te beginnen.</div>
+                    </td></tr>
                 </tbody>
             </table>
         </div>
 
-        <div style="padding:20px; border-top:1px solid #e5e7eb; background:white; display:flex; justify-content:flex-end; gap:10px; align-items:center;">
-            <span id="sb-count-label" style="margin-right:auto; font-weight:bold; color:#374151;">0 items geselecteerd</span>
-            <button id="sb-import-btn" disabled style="padding:10px 24px; background:#10b981; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; opacity:0.5; transition: all 0.2s;">Importeer Selectie</button>
+        <div style="padding:20px 24px; border-top:1px solid #e5e7eb; background:white; display:flex; justify-content:flex-end; gap:16px; align-items:center; z-index:20; box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <div style="margin-right:auto; display:flex; flex-direction:column;">
+                <span id="sb-count-label" style="font-weight:700; color:#111827; font-size:1.1rem;">0 items</span>
+                <span style="font-size:0.8rem; color:#6b7280;">Geselecteerd voor import</span>
+            </div>
+            <button id="sb-import-btn" disabled class="sb-btn" style="padding:12px 32px; background:#10b981; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700; opacity:0.5; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3); font-size:1rem; display:flex; align-items:center; gap:8px;">
+                <span>🚀</span> Importeer Selectie
+            </button>
         </div>
     `;
 
@@ -280,47 +350,83 @@ function renderList() {
     listBody.innerHTML = '';
 
     if (scannedItems.length === 0) {
-        listBody.innerHTML = '<tr><td colspan="5" style="padding:20px; text-align:center;">Geen items gevonden.</td></tr>';
+        listBody.innerHTML = '<tr><td colspan="5" style="padding:60px; text-align:center; color:#6b7280;">Geen items gevonden.</td></tr>';
         importBtn.disabled = true;
         importBtn.style.opacity = "0.5";
         return;
     }
 
     scannedItems.forEach((item, index) => {
+        // CHECK OP WITHDRAWN STATUS
+        const isWithdrawn = item.status && (
+            item.status.toLowerCase().includes('withdrawn') || 
+            item.status.toLowerCase().includes('geannuleerd') ||
+            item.status.toLowerCase().includes('cancel')
+        );
+        
+        // Als item bestaat OF is teruggetrokken, is het "disabled"
+        const isUnavailable = item.exists || isWithdrawn;
+
+        // Als unavailable, deselecteer het als default logic
+        if (isUnavailable) {
+            item.selected = false;
+        }
+
         const tr = document.createElement('tr');
         tr.style.borderBottom = "1px solid #f3f4f6";
+        tr.className = isUnavailable ? '' : 'sb-row-hover'; // Alleen hover effect op actieve items
         
-        if (item.exists) {
-            tr.style.opacity = "0.6";
+        if (isUnavailable) {
+            tr.style.opacity = "0.5";
             tr.style.background = "#f9fafb";
+            tr.style.filter = "grayscale(100%)"; // Maak withdrawn/existing helemaal grijs
+        } else {
+            tr.style.background = "white";
         }
 
         const qcBadge = item.qcPhotos.length > 0 
-            ? `<span style="background:#d1fae5; color:#065f46; padding:2px 6px; border-radius:4px; font-size:0.75rem;">📸 ${item.qcPhotos.length}</span>` 
+            ? `<span style="background:#ecfdf5; color:#059669; padding:4px 8px; border-radius:99px; font-size:0.7rem; font-weight:600; border:1px solid #10b98133; display:inline-flex; align-items:center; gap:4px;">📸 ${item.qcPhotos.length}</span>` 
             : ``;
             
-        let statusHtml = `<div style="color:${item.status.includes('Warehouse') ? 'green' : 'orange'}">${item.status}</div>`;
+        let statusHtml = `<div style="color:${item.status.includes('Warehouse') ? '#10b981' : '#f59e0b'}; font-weight:500;">${item.status}</div>`;
+        
         if (item.exists) {
-            statusHtml = `<div style="color:#ef4444; font-weight:bold;">⚠️ Al in voorraad</div>`;
+            statusHtml = `<div style="color:#ef4444; font-weight:700; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:1.1em;">⚠️</span> Al in voorraad
+            </div>`;
+        } else if (isWithdrawn) {
+            // NIEUWE STATUS WEERGAVE VOOR WITHDRAWN
+            statusHtml = `<div style="color:#6b7280; font-weight:700; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:1.1em;">🚫</span> Order Withdrawn
+            </div>`;
         }
 
         tr.innerHTML = `
-            <td style="padding:10px;">
-                <input type="checkbox" class="sb-item-check" data-index="${index}" 
+            <td style="padding:16px 24px;">
+                <input type="checkbox" class="sb-item-check sb-checkbox" data-index="${index}" 
                 ${item.selected ? 'checked' : ''} 
-                ${item.exists ? 'disabled' : ''}>
+                ${isUnavailable ? 'disabled' : ''}>
             </td>
-            <td style="padding:10px;"><img src="${item.image}" style="width:50px; height:50px; object-fit:cover; border-radius:4px;"></td>
-            <td style="padding:10px; max-width:250px;">
-                <div style="font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${item.title}">${item.title}</div>
-                <div style="font-size:0.8rem; color:#6b7280;">Order: ${item.orderNo}</div>
-                <div style="font-size:0.75rem; color:#9ca3af;">${item.subId || ''}</div>
+            <td style="padding:16px 12px;">
+                <div style="width:50px; height:50px; border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                    <img src="${item.image}" style="width:100%; height:100%; object-fit:cover;">
+                </div>
             </td>
-            <td style="padding:10px; font-size:0.85rem; color:#4b5563;">
-                <div style="margin-bottom:4px;">${qcBadge}</div>
+            <td style="padding:16px 12px; max-width:300px;">
+                <div style="font-weight:600; color:#111827; margin-bottom:4px; line-height:1.4;" title="${item.title}">
+                    ${item.title.length > 60 ? item.title.substring(0, 60) + '...' : item.title}
+                </div>
+                <div style="display:flex; gap:12px; font-size:0.75rem; color:#6b7280;">
+                    <span style="background:#f3f4f6; padding:2px 6px; border-radius:4px;">ORD: ${item.orderNo}</span>
+                     ${item.subId ? `<span style="background:#f3f4f6; padding:2px 6px; border-radius:4px;">ID: ${item.subId}</span>` : ''}
+                </div>
+                <div style="font-size:0.75rem; color:#9ca3af; margin-top:4px; font-style:italic;">${item.options}</div>
+            </td>
+            <td style="padding:16px 12px; font-size:0.85rem;">
+                <div style="margin-bottom:6px;">${qcBadge}</div>
                 ${statusHtml}
             </td>
-            <td style="padding:10px; text-align:right; font-weight:bold;">¥${item.price}</td>
+            <td style="padding:16px 24px 16px 12px; text-align:right; font-weight:700; color:#374151; font-size:1rem;">¥${item.price}</td>
         `;
         listBody.appendChild(tr);
     });
@@ -332,14 +438,25 @@ function renderList() {
         };
     });
 
-    importBtn.disabled = false;
-    importBtn.style.opacity = "1";
+    const hasSelected = scannedItems.some(i => i.selected);
+    importBtn.disabled = !hasSelected;
+    importBtn.style.opacity = hasSelected ? "1" : "0.5";
+    importBtn.style.cursor = hasSelected ? "pointer" : "not-allowed";
+    
     updateCount();
 }
 
 function toggleAll(checked) {
     scannedItems.forEach(i => {
-        if (!i.exists) i.selected = checked;
+        const isWithdrawn = i.status && (
+            i.status.toLowerCase().includes('withdrawn') || 
+            i.status.toLowerCase().includes('geannuleerd') ||
+            i.status.toLowerCase().includes('cancel')
+        );
+        
+        if (!i.exists && !isWithdrawn) {
+             i.selected = checked;
+        }
     });
     renderList();
 }
