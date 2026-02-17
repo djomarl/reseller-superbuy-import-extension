@@ -48,7 +48,7 @@ function attemptInject() {
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             letter-spacing: 0.025em;
         `;
-        
+
         btn.onmouseover = () => {
             btn.style.transform = "translateY(-1px) scale(1.02)";
             btn.style.boxShadow = "0 10px 15px -3px rgba(16, 185, 129, 0.4), 0 4px 6px -2px rgba(16, 185, 129, 0.2)";
@@ -57,7 +57,7 @@ function attemptInject() {
             btn.style.transform = "translateY(0) scale(1)";
             btn.style.boxShadow = "0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2)";
         };
-        
+
         btn.onclick = openModal;
         target.appendChild(btn);
     }
@@ -93,10 +93,10 @@ function openModal() {
     const overlay = document.createElement('div');
     overlay.id = 'sb-modal-overlay';
     overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(17, 24, 39, 0.7); z-index:99999; display:flex; justify-content:center; align-items:center; backdrop-filter: blur(4px); animation: sb-fadeIn 0.2s ease-out;";
-    
+
     const modal = document.createElement('div');
     modal.style.cssText = "background:white; width:90%; max-width:1000px; height:85%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; animation: sb-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);";
-    
+
     modal.innerHTML = `
         <div style="padding:24px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; background: linear-gradient(to right, #ffffff, #f9fafb);">
             <div style="display:flex; align-items:center; gap:12px;">
@@ -177,7 +177,7 @@ async function runScan(multiPage) {
     const statusLabel = document.getElementById('sb-status');
     scannedItems = [];
     listBody.innerHTML = '<tr><td colspan="5" style="padding:40px; text-align:center; color:#6b7280;">🔍 Bezig met scannen...</td></tr>';
-    
+
     let pagesToScan = multiPage ? 5 : 1;
     let currentPageUrl = window.location.href;
     const urlObj = new URL(currentPageUrl);
@@ -187,7 +187,7 @@ async function runScan(multiPage) {
     // A. Scrapen
     for (let i = 1; i <= pagesToScan; i++) {
         statusLabel.innerText = `Scannen pagina ${i} van ${pagesToScan}...`;
-        
+
         try {
             let doc = document;
             if (i > 1 || (multiPage && i === 1)) {
@@ -199,7 +199,7 @@ async function runScan(multiPage) {
             }
 
             const itemsOnPage = scrapeDOM(doc);
-            
+
             // Voeg alleen unieke items toe (FIXED: Betere uniekheidscheck op subId)
             itemsOnPage.forEach(item => {
                 const isDuplicate = scannedItems.some(x => {
@@ -208,9 +208,9 @@ async function runScan(multiPage) {
                         return x.subId === item.subId;
                     }
                     // 2. Anders: check OrderNo + Title + Options (variant)
-                    return x.orderNo === item.orderNo && 
-                           x.title === item.title && 
-                           x.options === item.options;
+                    return x.orderNo === item.orderNo &&
+                        x.title === item.title &&
+                        x.options === item.options;
                 });
 
                 if (!isDuplicate) {
@@ -219,7 +219,7 @@ async function runScan(multiPage) {
             });
 
             if (itemsOnPage.length === 0 && i > 1) break;
-            if (multiPage) await new Promise(r => setTimeout(r, 800)); 
+            if (multiPage) await new Promise(r => setTimeout(r, 800));
 
         } catch (e) {
             console.error("Scan error", e);
@@ -246,26 +246,43 @@ async function checkDuplications() {
     }
 
     try {
-        // We sturen nu de Sub IDs mee (DI...)
-        // Dit lost de bug op dat hij hele orders markeert als ze hetzelfde ordernummer hebben
         const checkIds = scannedItems.map(i => i.subId).filter(id => id);
 
         const response = await fetch(`${settings.dashboardUrl}/superbuy/check-items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 secret: settings.secretKey,
-                order_nos: scannedItems.map(i => i.orderNo), // Backup voor legacy
-                sub_ids: checkIds // NIEUW: Stuur specifieke ID's
+                order_nos: scannedItems.map(i => i.orderNo),
+                sub_ids: checkIds
             })
         });
 
         const data = await response.json();
-        
-        if (data.existing && Array.isArray(data.existing)) {
+
+        if (data.existing_details) {
             scannedItems.forEach(item => {
-                // BUGFIX: Check of het SPECIFIEKE Sub ID (DI...) bestaat
-                // De server moet dus een lijst met DI-nummers teruggeven
+                const key = item.subId || item.orderNo;
+                const details = data.existing_details[key] || (item.subId ? data.existing_details[item.subId] : null);
+
+                if (details) {
+                    const serverCount = details.qc_count || 0;
+                    const localCount = item.qcPhotos.length;
+
+                    if (localCount > serverCount) {
+                        item.exists = true;
+                        item.isUpdate = true;
+                        item.selected = true;
+                    } else {
+                        item.exists = true;
+                        item.isUpdate = false;
+                        item.selected = false;
+                    }
+                }
+            });
+        }
+        else if (data.existing && Array.isArray(data.existing)) {
+            scannedItems.forEach(item => {
                 if (item.subId && data.existing.includes(item.subId)) {
                     item.exists = true;
                     item.selected = false;
@@ -306,18 +323,18 @@ function scrapeDOM(doc) {
 
             const qcPhotos = [];
             tr.querySelectorAll('.pic-list li').forEach(li => {
-                const link = li.querySelector('a.lookPic'); 
+                const link = li.querySelector('a.lookPic');
                 const img = li.querySelector('img');
                 let url = link ? link.href : (img ? img.src : null);
                 if (url && !url.includes('javascript')) {
                     if (url.startsWith('//')) url = 'https:' + url;
-                    url = url.split('?')[0]; 
+                    url = url.split('?')[0];
                     qcPhotos.push(url);
                 }
             });
 
             if (qcPhotos.length === 0) {
-                 tr.querySelectorAll('a').forEach(a => {
+                tr.querySelectorAll('a').forEach(a => {
                     if ((a.innerText.includes('Photo') || a.className.includes('pic')) && !a.href.includes('javascript') && !a.href.includes('item.htm')) {
                         qcPhotos.push(a.href);
                     }
@@ -335,7 +352,7 @@ function scrapeDOM(doc) {
                 price: price,
                 qcPhotos: qcPhotos,
                 selected: true,
-                exists: false 
+                exists: false
             });
         });
     });
@@ -346,7 +363,7 @@ function scrapeDOM(doc) {
 function renderList() {
     const listBody = document.getElementById('sb-items-list');
     const importBtn = document.getElementById('sb-import-btn');
-    
+
     listBody.innerHTML = '';
 
     if (scannedItems.length === 0) {
@@ -357,45 +374,47 @@ function renderList() {
     }
 
     scannedItems.forEach((item, index) => {
-        // CHECK OP WITHDRAWN STATUS
         const isWithdrawn = item.status && (
-            item.status.toLowerCase().includes('withdrawn') || 
+            item.status.toLowerCase().includes('withdrawn') ||
             item.status.toLowerCase().includes('geannuleerd') ||
             item.status.toLowerCase().includes('cancel')
         );
-        
-        // Als item bestaat OF is teruggetrokken, is het "disabled"
-        const isUnavailable = item.exists || isWithdrawn;
 
-        // Als unavailable, deselecteer het als default logic
+        const isUnavailable = (item.exists && !item.isUpdate) || isWithdrawn;
+
         if (isUnavailable) {
             item.selected = false;
         }
 
         const tr = document.createElement('tr');
         tr.style.borderBottom = "1px solid #f3f4f6";
-        tr.className = isUnavailable ? '' : 'sb-row-hover'; // Alleen hover effect op actieve items
-        
+        tr.className = isUnavailable ? '' : 'sb-row-hover';
+
         if (isUnavailable) {
             tr.style.opacity = "0.5";
             tr.style.background = "#f9fafb";
-            tr.style.filter = "grayscale(100%)"; // Maak withdrawn/existing helemaal grijs
+            tr.style.filter = "grayscale(100%)";
+        } else if (item.isUpdate) {
+            tr.style.background = "#eff6ff";
         } else {
             tr.style.background = "white";
         }
 
-        const qcBadge = item.qcPhotos.length > 0 
-            ? `<span style="background:#ecfdf5; color:#059669; padding:4px 8px; border-radius:99px; font-size:0.7rem; font-weight:600; border:1px solid #10b98133; display:inline-flex; align-items:center; gap:4px;">📸 ${item.qcPhotos.length}</span>` 
+        const qcBadge = item.qcPhotos.length > 0
+            ? `<span style="background:#ecfdf5; color:#059669; padding:4px 8px; border-radius:99px; font-size:0.7rem; font-weight:600; border:1px solid #10b98133; display:inline-flex; align-items:center; gap:4px;">📸 ${item.qcPhotos.length}</span>`
             : ``;
-            
+
         let statusHtml = `<div style="color:${item.status.includes('Warehouse') ? '#10b981' : '#f59e0b'}; font-weight:500;">${item.status}</div>`;
-        
-        if (item.exists) {
+
+        if (item.isUpdate) {
+            statusHtml = `<div style="color:#2563eb; font-weight:700; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:1.1em;">🆙</span> NIEUWE FOTO'S
+            </div>`;
+        } else if (item.exists) {
             statusHtml = `<div style="color:#ef4444; font-weight:700; display:flex; align-items:center; gap:6px;">
                 <span style="font-size:1.1em;">⚠️</span> Al in voorraad
             </div>`;
         } else if (isWithdrawn) {
-            // NIEUWE STATUS WEERGAVE VOOR WITHDRAWN
             statusHtml = `<div style="color:#6b7280; font-weight:700; display:flex; align-items:center; gap:6px;">
                 <span style="font-size:1.1em;">🚫</span> Order Withdrawn
             </div>`;
@@ -442,20 +461,20 @@ function renderList() {
     importBtn.disabled = !hasSelected;
     importBtn.style.opacity = hasSelected ? "1" : "0.5";
     importBtn.style.cursor = hasSelected ? "pointer" : "not-allowed";
-    
+
     updateCount();
 }
 
 function toggleAll(checked) {
     scannedItems.forEach(i => {
         const isWithdrawn = i.status && (
-            i.status.toLowerCase().includes('withdrawn') || 
+            i.status.toLowerCase().includes('withdrawn') ||
             i.status.toLowerCase().includes('geannuleerd') ||
             i.status.toLowerCase().includes('cancel')
         );
-        
-        if (!i.exists && !isWithdrawn) {
-             i.selected = checked;
+
+        if ((!i.exists || i.isUpdate) && !isWithdrawn) {
+            i.selected = checked;
         }
     });
     renderList();
@@ -469,7 +488,7 @@ function updateCount() {
 async function sendToLaravel() {
     const selected = scannedItems.filter(i => i.selected);
     const btn = document.getElementById('sb-import-btn');
-    
+
     if (selected.length === 0) {
         alert("Selecteer ten minste 1 item.");
         return;
@@ -489,9 +508,9 @@ async function sendToLaravel() {
         const response = await fetch(`${settings.dashboardUrl}/superbuy/import-extension`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 secret: settings.secretKey,
-                items: selected 
+                items: selected
             })
         });
 
