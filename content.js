@@ -1,69 +1,87 @@
-// content.js - Superbuy Sync met Storage Settings
-
-// Globale variabelen
-let scannedItems = [];
 let isModalOpen = false;
-
-// Helper: Haal instellingen op uit Chrome Storage
-async function getSettings() {
-    return new Promise((resolve) => {
-        chrome.storage.sync.get(['dashboardUrl', 'secretKey'], (items) => {
-            resolve(items);
-        });
-    });
-}
+let isParcelSync = false;
+let scannedItems = [];
+let currentParcelData = null;
 
 // 1. Start de knop injectie
 window.addEventListener('load', () => attemptInject());
 const observer = new MutationObserver(() => {
-    if (!document.getElementById('sb-sync-trigger')) attemptInject();
+    attemptInject();
 });
 observer.observe(document.body, { childList: true, subtree: true });
 
 function attemptInject() {
-    // Zoek naar een geschikte plek voor de knop (titel balk of header)
-    const target = document.querySelector('.mod-title') || document.querySelector('.user-title') || document.querySelector('h3');
-    const table = document.querySelector('table');
+    const url = window.location.href.toLowerCase();
+    const isOrderPage = url.includes('/order') && !url.includes('/parceldetail');
+    const isParcelPage = url.includes('/parceldetail') || url.includes('/package/detail') || url.includes('id=pn');
 
-    if (target && table && !document.getElementById('sb-sync-trigger')) {
-        const btn = document.createElement('button');
-        btn.id = 'sb-sync-trigger';
-        btn.innerHTML = `
-            <span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">🚀</span> 
-            <span style="vertical-align: middle;">Super Sync</span>
-        `;
-        // Verbeterde styling voor de inject knop
-        btn.style.cssText = `
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white; 
-            padding: 8px 20px; 
-            border-radius: 99px; 
-            border: none; 
-            font-weight: 600; 
-            cursor: pointer; 
-            margin-left: 15px; 
-            box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2); 
-            transition: all 0.2s ease; 
-            vertical-align: middle;
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            letter-spacing: 0.025em;
-        `;
+    if (!isOrderPage && !isParcelPage) return;
 
-        btn.onmouseover = () => {
-            btn.style.transform = "translateY(-1px) scale(1.02)";
-            btn.style.boxShadow = "0 10px 15px -3px rgba(16, 185, 129, 0.4), 0 4px 6px -2px rgba(16, 185, 129, 0.2)";
-        };
-        btn.onmouseout = () => {
-            btn.style.transform = "translateY(0) scale(1)";
-            btn.style.boxShadow = "0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2)";
-        };
+    // Reguliere Order Sync Knop
+    if (isOrderPage && !document.getElementById('sb-sync-trigger')) {
+        let target = document.querySelector('.mod-title') || document.querySelector('.user-title') || document.querySelector('h3');
+        const table = document.querySelector('table');
 
-        btn.onclick = openModal;
-        target.appendChild(btn);
+        // Checkt op table of body text om er zeker van te zijn dat pagina klaar is
+        if (table || (document.body && document.body.innerText.includes('Order'))) {
+            const btn = document.createElement('button');
+            btn.id = 'sb-sync-trigger';
+            btn.innerHTML = `<span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">🚀</span> <span style="vertical-align: middle; margin-left: 4px;">Super Sync</span>`;
+            
+            if (target) {
+                // Invoegen in titel (originele plaats)
+                btn.style.cssText = `
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 8px 20px; border-radius: 99px; border: none; font-weight: 600; cursor: pointer; margin-left: 15px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3), 0 2px 4px -1px rgba(16, 185, 129, 0.2); transition: all 0.2s ease; vertical-align: middle; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; letter-spacing: 0.025em; display: inline-flex; align-items: center; justify-content: center;
+                `;
+                btn.onmouseover = () => { btn.style.transform = "translateY(-1px) scale(1.02)"; btn.style.boxShadow = "0 10px 15px -3px rgba(16, 185, 129, 0.4)"; };
+                btn.onmouseout = () => { btn.style.transform = "translateY(0) scale(1)"; btn.style.boxShadow = "0 4px 6px -1px rgba(16, 185, 129, 0.3)"; };
+                btn.onclick = () => { isParcelSync = false; openModal(); };
+                target.appendChild(btn);
+            } else {
+                // Floating Fallback rechts beneden
+                btn.style.cssText = `
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 14px 28px; border-radius: 99px; border: none; font-weight: 700; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4); transition: all 0.2s ease; position: fixed; bottom: 30px; right: 30px; z-index: 999999; font-size: 16px; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center;
+                `;
+                btn.onmouseover = () => { btn.style.transform = "translateY(-2px) scale(1.05)"; btn.style.boxShadow = "0 15px 25px -5px rgba(16, 185, 129, 0.5)"; };
+                btn.onmouseout = () => { btn.style.transform = "translateY(0) scale(1)"; btn.style.boxShadow = "0 10px 15px -3px rgba(16, 185, 129, 0.4)"; };
+                btn.onclick = () => { isParcelSync = false; openModal(); };
+                document.body.appendChild(btn);
+            }
+        }
+    }
+
+    // Parcel Sync Knop (op parcel details pagina)
+    if (isParcelPage && !document.getElementById('sb-parcel-sync-trigger')) {
+        const text = document.body ? document.body.innerText : '';
+        // Alleen tonen als we zeker weten dat the DOM geladen is
+        if (text.includes('Parcel') || document.querySelector('.Problem-Consulting') || url.includes('id=pn')) {
+            const pbtn = document.createElement('button');
+            pbtn.id = 'sb-parcel-sync-trigger';
+            pbtn.innerHTML = `<span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">📦</span> <span style="vertical-align: middle; margin-left: 4px;">Sync Parcel</span>`;
+            
+            // Altijd Floating Fixed Widget voor pakketten! Super strak en duidelijk zichtbaar
+            pbtn.style.cssText = `
+                background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 14px 28px; border-radius: 99px; border: none; font-weight: 700; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.4), 0 4px 6px -2px rgba(139, 92, 246, 0.2); transition: all 0.2s ease; position: fixed; bottom: 30px; right: 30px; z-index: 999999; font-size: 16px; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center;
+            `;
+            // Add a little entrance animation class directly encoded
+            const animId = 'sb-bounce-anim';
+            if (!document.getElementById(animId)) {
+                const style = document.createElement('style');
+                style.id = animId;
+                style.innerHTML = `@keyframes sbBounceIn { 0% { opacity: 0; transform: translateY(40px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }`;
+                document.head.appendChild(style);
+            }
+            pbtn.style.animation = 'sbBounceIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+
+            pbtn.onmouseover = () => { pbtn.style.transform = "translateY(-2px) scale(1.05)"; pbtn.style.boxShadow = "0 15px 25px -5px rgba(139, 92, 246, 0.5)"; };
+            pbtn.onmouseout = () => { pbtn.style.transform = "translateY(0) scale(1)"; pbtn.style.boxShadow = "0 10px 15px -3px rgba(139, 92, 246, 0.4)"; };
+            pbtn.onclick = () => { isParcelSync = true; openModal(); };
+            
+            document.body.appendChild(pbtn);
+        }
     }
 }
 
-// 2. De Modal Interface
 function openModal() {
     if (isModalOpen) return;
     isModalOpen = true;
@@ -97,19 +115,23 @@ function openModal() {
     const modal = document.createElement('div');
     modal.style.cssText = "background:white; width:90%; max-width:1000px; height:85%; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; animation: sb-slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);";
 
-    modal.innerHTML = `
-        <div style="padding:24px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; background: linear-gradient(to right, #ffffff, #f9fafb);">
-            <div style="display:flex; align-items:center; gap:12px;">
-                <span style="font-size:1.5rem;">📦</span>
-                <div>
-                    <h2 style="margin:0; font-size:1.25rem; font-weight:700; color:#111827; letter-spacing: -0.01em;">Superbuy Import</h2>
-                    <p style="margin:2px 0 0 0; font-size:0.85rem; color:#6b7280;">Synchroniseer je orders naar het dashboard</p>
-                </div>
-            </div>
-            <button id="sb-close-btn" class="sb-btn" style="background:rgba(229, 231, 235, 0.5); border:none; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; color:#4b5563; display:flex; align-items:center; justify-content:center;">&times;</button>
-        </div>
-        
-        <div id="sb-actions" style="padding:20px 24px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    const titleText = isParcelSync ? 'Superbuy Parcel Import' : 'Superbuy Import';
+    const subText = isParcelSync ? 'Synchroniseer je hele pakket en vind de bijbehorende items' : 'Synchroniseer je orders naar het dashboard';
+    const importBtnText = isParcelSync ? 'Importeer Parcel & Selectie' : 'Importeer Selectie';
+
+    let actionsHtml = '';
+    if (isParcelSync) {
+        actionsHtml = `
+            <button id="sb-scan-parcel" class="sb-btn" style="padding:10px 20px; background:#8b5cf6; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display:flex; align-items:center; gap:6px;">
+                <span>📦</span> Haal Parcel Items Op
+            </button>
+            <div style="height:24px; width:1px; background:#e5e7eb; margin:0 8px;"></div>
+            <span id="sb-status" style="display:flex; align-items:center; color:#6b7280; font-size:0.9rem; font-weight:500; background:#f3f4f6; padding:6px 12px; border-radius:99px;">
+                <span>👋 Klik op de knop om orders te doorzoeken...</span>
+            </span>
+        `;
+    } else {
+        actionsHtml = `
             <button id="sb-scan-page" class="sb-btn" style="padding:10px 20px; background:#3b82f6; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display:flex; align-items:center; gap:6px;">
                 <span>📄</span> Scan Huidige Pagina
             </button>
@@ -120,6 +142,23 @@ function openModal() {
             <span id="sb-status" style="display:flex; align-items:center; color:#6b7280; font-size:0.9rem; font-weight:500; background:#f3f4f6; padding:6px 12px; border-radius:99px;">
                 <span>👋 Klaar voor start...</span>
             </span>
+        `;
+    }
+
+    modal.innerHTML = `
+        <div style="padding:24px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center; background: linear-gradient(to right, #ffffff, #f9fafb);">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span style="font-size:1.5rem;">${isParcelSync ? '📦' : '🚀'}</span>
+                <div>
+                    <h2 style="margin:0; font-size:1.25rem; font-weight:700; color:#111827; letter-spacing: -0.01em;">${titleText}</h2>
+                    <p style="margin:2px 0 0 0; font-size:0.85rem; color:#6b7280;">${subText}</p>
+                </div>
+            </div>
+            <button id="sb-close-btn" class="sb-btn" style="background:rgba(229, 231, 235, 0.5); border:none; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; color:#4b5563; display:flex; align-items:center; justify-content:center;">&times;</button>
+        </div>
+        
+        <div id="sb-actions" style="padding:20px 24px; background:#fff; border-bottom:1px solid #e5e7eb; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            ${actionsHtml}
         </div>
 
         <div id="sb-items-container" style="flex:1; overflow-y:auto; padding:0; background:#f9fafb;">
@@ -149,7 +188,7 @@ function openModal() {
                 <span style="font-size:0.8rem; color:#6b7280;">Geselecteerd voor import</span>
             </div>
             <button id="sb-import-btn" disabled class="sb-btn" style="padding:12px 32px; background:#10b981; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700; opacity:0.5; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3); font-size:1rem; display:flex; align-items:center; gap:8px;">
-                <span>🚀</span> Importeer Selectie
+                <span>🚀</span> ${importBtnText}
             </button>
         </div>
     `;
@@ -158,8 +197,12 @@ function openModal() {
     document.body.appendChild(overlay);
 
     document.getElementById('sb-close-btn').onclick = closeModal;
-    document.getElementById('sb-scan-page').onclick = () => runScan(false);
-    document.getElementById('sb-scan-all').onclick = () => runScan(true);
+    if (isParcelSync) {
+        document.getElementById('sb-scan-parcel').onclick = () => runParcelScan();
+    } else {
+        document.getElementById('sb-scan-page').onclick = () => runScan(false);
+        document.getElementById('sb-scan-all').onclick = () => runScan(true);
+    }
     document.getElementById('sb-toggle-all').onchange = (e) => toggleAll(e.target.checked);
     document.getElementById('sb-import-btn').onclick = sendToLaravel;
 }
@@ -169,9 +212,115 @@ function closeModal() {
     if (overlay) overlay.remove();
     isModalOpen = false;
     scannedItems = [];
+    currentParcelData = null;
 }
 
-// 3. Scan & Check Logica
+// 3. Scan & Check Logica (Parcel Sync)
+async function runParcelScan() {
+    const listBody = document.getElementById('sb-items-list');
+    const statusLabel = document.getElementById('sb-status');
+    scannedItems = [];
+    currentParcelData = null;
+    listBody.innerHTML = '<tr><td colspan="5" style="padding:40px; text-align:center; color:#6b7280;">🔍 Bezig met ophalen parcel info...</td></tr>';
+
+    // 1. Scrape Parcel Info
+    const text = document.body.innerText;
+    
+    // Probeer eerst via de URL (bijv. id=PN26731043232)
+    const urlParams = new URLSearchParams(window.location.search);
+    let parcelNo = urlParams.get('id');
+    
+    // Anders via de tekst
+    if (!parcelNo) {
+        const parcelMatch = text.match(/Parcel No\.:?\s*(PN\d+)/) || text.match(/(PN\d+)/);
+        parcelNo = parcelMatch ? parcelMatch[1] : '';
+    }
+
+    const actualPaidMatch = text.match(/Actual Paid:\s*([A-Za-z€$£￥\s]+[\d\.,]+)/i) || text.match(/Total Amount:\s*([A-Za-z€$£￥\s]+[\d\.,]+)/i);
+    const actualPaid = actualPaidMatch ? actualPaidMatch[1].trim() : '0.00';
+
+    const diMatches = text.match(/DI\d+/g) || [];
+    const targetDIs = [...new Set(diMatches)];
+
+    if (!parcelNo) {
+        statusLabel.innerText = "⚠️ Kon Parcel No niet vinden op de pagina.";
+        listBody.innerHTML = '';
+        return;
+    }
+
+    currentParcelData = {
+        parcelNo: parcelNo,
+        shippingCostRaw: actualPaid,
+        targetDIs: targetDIs
+    };
+
+    if (targetDIs.length === 0) {
+        statusLabel.innerText = "⚠️ Kon geen items (DI-nummers) vinden in dit pakket.";
+        listBody.innerHTML = '';
+        return;
+    }
+
+    statusLabel.innerText = `${targetDIs.length} items gevonden in pakket. Zoeken naar productdetails in orders...`;
+
+    // 2. Fetch Orders /order page to get all details for these DIs
+    let maxPages = 15;
+    let matchedItemsCount = 0;
+    
+    for (let i = 1; i <= maxPages; i++) {
+        statusLabel.innerText = `Orders doorzoeken (pagina ${i}). Gevonden: ${matchedItemsCount}/${targetDIs.length}...`;
+        try {
+            const fetchUrl = `${window.location.origin}/order?page=${i}`;
+            const response = await fetch(fetchUrl);
+            const htmlText = await response.text();
+            
+            if (response.url.toLowerCase().includes('login') || htmlText.includes('loginUser') || htmlText.includes('<title>Login')) {
+                console.error("Not logged in or redirected");
+                statusLabel.innerText = "⚠️ Je bent niet ingelogd op Superbuy!";
+                break;
+            }
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+
+            const itemsOnPage = scrapeDOM(doc);
+            
+            // Check if items match target DIs
+            itemsOnPage.forEach(item => {
+                if (item.subId && targetDIs.includes(item.subId)) {
+                    // Check if already in scannedItems
+                    if (!scannedItems.some(x => x.subId === item.subId)) {
+                        scannedItems.push(item);
+                        matchedItemsCount++;
+                    }
+                }
+            });
+
+            if (itemsOnPage.length === 0 && i > 1) {
+                break; // Einde orders bereikt (of geen order tabellen gevonden)
+            }
+
+            if (matchedItemsCount >= targetDIs.length) {
+                break; // Alle items gevonden
+            }
+
+            await new Promise(r => setTimeout(r, 600)); // sleep slightly
+
+        } catch (e) {
+            console.error("Error fetching order page", e);
+        }
+    }
+
+    if (scannedItems.length > 0) {
+        statusLabel.innerText = `Controleren op bestaande items...`;
+        await checkDuplications();
+    }
+
+    statusLabel.innerText = `Klaar! ${scannedItems.length} pakket items gedetailleerd gevonden.`;
+    renderList();
+}
+
+
+// 3. Scan & Check Logica (Reguliere Sync)
 async function runScan(multiPage) {
     const listBody = document.getElementById('sb-items-list');
     const statusLabel = document.getElementById('sb-status');
@@ -200,17 +349,11 @@ async function runScan(multiPage) {
 
             const itemsOnPage = scrapeDOM(doc);
 
-            // Voeg alleen unieke items toe (FIXED: Betere uniekheidscheck op subId)
+            // Voeg alleen unieke items toe
             itemsOnPage.forEach(item => {
                 const isDuplicate = scannedItems.some(x => {
-                    // 1. Als we een uniek SubID (DI...) hebben, gebruik dat
-                    if (x.subId && item.subId) {
-                        return x.subId === item.subId;
-                    }
-                    // 2. Anders: check OrderNo + Title + Options (variant)
-                    return x.orderNo === item.orderNo &&
-                        x.title === item.title &&
-                        x.options === item.options;
+                    if (x.subId && item.subId) return x.subId === item.subId;
+                    return x.orderNo === item.orderNo && x.title === item.title && x.options === item.options;
                 });
 
                 if (!isDuplicate) {
@@ -272,11 +415,12 @@ async function checkDuplications() {
                     if (localCount > serverCount) {
                         item.exists = true;
                         item.isUpdate = true;
-                        item.selected = true;
+                        item.selected = true; // Bij parcel sync updaten we ook bestaande
                     } else {
                         item.exists = true;
                         item.isUpdate = false;
-                        item.selected = false;
+                        // Bij een parcel sync willen we waarschijnlijk ook bestaande items meesturen zodat ze gekoppeld worden aan het pakket
+                        item.selected = isParcelSync ? true : false;
                     }
                 }
             });
@@ -285,7 +429,7 @@ async function checkDuplications() {
             scannedItems.forEach(item => {
                 if (item.subId && data.existing.includes(item.subId)) {
                     item.exists = true;
-                    item.selected = false;
+                    item.selected = isParcelSync ? true : false;
                 }
             });
         }
@@ -317,7 +461,6 @@ function scrapeDOM(doc) {
             const priceText = Array.from(tr.querySelectorAll('td')).find(td => /[\d.,]+/.test(td.innerText) && (td.innerText.includes('￥') || td.innerText.includes('$') || td.innerText.includes('€')))?.innerText || "0";
             const price = priceText.match(/[\d.,]+/)?.[0] || "0";
 
-            // NIEUW: Probeer het unieke DI nummer te vinden (staat vaak onder de foto of in de tekst)
             const subIdMatch = tr.innerText.match(/(DI\d+)/);
             const subId = subIdMatch ? subIdMatch[0] : "";
 
@@ -343,7 +486,7 @@ function scrapeDOM(doc) {
 
             items.push({
                 orderNo,
-                subId: subId, // Belangrijk voor duplicaat check
+                subId: subId,
                 title: titleEl.innerText.trim(),
                 link: titleEl.href,
                 image: tr.querySelector('img')?.src || "",
@@ -380,7 +523,8 @@ function renderList() {
             item.status.toLowerCase().includes('cancel')
         );
 
-        const isUnavailable = (item.exists && !item.isUpdate) || isWithdrawn;
+        // Bij Parcel Sync staan we wel toe dat bestaande items geselecteerd zijn (om ze te koppelen)
+        const isUnavailable = (!isParcelSync && item.exists && !item.isUpdate) || isWithdrawn;
 
         if (isUnavailable) {
             item.selected = false;
@@ -396,6 +540,8 @@ function renderList() {
             tr.style.filter = "grayscale(100%)";
         } else if (item.isUpdate) {
             tr.style.background = "#eff6ff";
+        } else if (isParcelSync && item.exists) {
+            tr.style.background = "#f0fdf4"; // Groenige tintje voor bestaande items in pakket
         } else {
             tr.style.background = "white";
         }
@@ -411,8 +557,8 @@ function renderList() {
                 <span style="font-size:1.1em;">🆙</span> NIEUWE FOTO'S
             </div>`;
         } else if (item.exists) {
-            statusHtml = `<div style="color:#ef4444; font-weight:700; display:flex; align-items:center; gap:6px;">
-                <span style="font-size:1.1em;">⚠️</span> Al in voorraad
+            statusHtml = `<div style="color:${isParcelSync ? '#10b981' : '#ef4444'}; font-weight:700; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:1.1em;">${isParcelSync ? '✅' : '⚠️'}</span> Al in voorraad ${isParcelSync ? '(Wordt gekoppeld)' : ''}
             </div>`;
         } else if (isWithdrawn) {
             statusHtml = `<div style="color:#6b7280; font-weight:700; display:flex; align-items:center; gap:6px;">
@@ -450,86 +596,109 @@ function renderList() {
         listBody.appendChild(tr);
     });
 
-    document.querySelectorAll('.sb-item-check').forEach(cb => {
-        cb.onchange = (e) => {
-            scannedItems[e.target.dataset.index].selected = e.target.checked;
-            updateCount();
-        };
-    });
-
-    const hasSelected = scannedItems.some(i => i.selected);
-    importBtn.disabled = !hasSelected;
-    importBtn.style.opacity = hasSelected ? "1" : "0.5";
-    importBtn.style.cursor = hasSelected ? "pointer" : "not-allowed";
-
+    importBtn.disabled = scannedItems.filter(i => i.selected).length === 0;
+    importBtn.style.opacity = importBtn.disabled ? "0.5" : "1";
     updateCount();
 }
 
 function toggleAll(checked) {
-    scannedItems.forEach(i => {
-        const isWithdrawn = i.status && (
-            i.status.toLowerCase().includes('withdrawn') ||
-            i.status.toLowerCase().includes('geannuleerd') ||
-            i.status.toLowerCase().includes('cancel')
-        );
-
-        if ((!i.exists || i.isUpdate) && !isWithdrawn) {
-            i.selected = checked;
-        }
+    const checkboxes = document.querySelectorAll('.sb-item-check:not([disabled])');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        scannedItems[cb.dataset.index].selected = checked;
     });
-    renderList();
+    updateCount();
 }
 
 function updateCount() {
     const count = scannedItems.filter(i => i.selected).length;
-    document.getElementById('sb-count-label').innerText = `${count} items geselecteerd`;
+    document.getElementById('sb-count-label').innerText = `${count} items`;
+    const importBtn = document.getElementById('sb-import-btn');
+    importBtn.disabled = count === 0;
+    importBtn.style.opacity = count === 0 ? "0.5" : "1";
 }
 
-async function sendToLaravel() {
-    const selected = scannedItems.filter(i => i.selected);
-    const btn = document.getElementById('sb-import-btn');
-
-    if (selected.length === 0) {
-        alert("Selecteer ten minste 1 item.");
-        return;
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.classList.contains('sb-item-check')) {
+        const index = e.target.dataset.index;
+        scannedItems[index].selected = e.target.checked;
+        updateCount();
     }
+});
+
+// 5. Verzenden naar Laravel
+async function sendToLaravel() {
+    const selectedItems = scannedItems.filter(i => i.selected);
+
+    if (selectedItems.length === 0) return;
+
+    const btn = document.getElementById('sb-import-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span>⏳</span> Bezig...';
+    btn.disabled = true;
 
     const settings = await getSettings();
+
     if (!settings.dashboardUrl || !settings.secretKey) {
-        alert("⚠️ Oeps! Je hebt nog geen URL en Secret ingesteld.\n\nGa naar de extensie instellingen (rechtermuisknop op icoon -> Opties) en vul deze in.");
+        alert("⚠️ Geen instellingen! Vul je Dashboard URL en Secret Key in via de extensie opties.");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
         return;
     }
 
-    btn.innerText = "Bezig met verzenden...";
-    btn.disabled = true;
-    btn.style.background = "#f59e0b";
-
     try {
-        const response = await fetch(`${settings.dashboardUrl}/superbuy/import-extension`, {
+        const endpoint = isParcelSync ? '/superbuy/import-parcel-extension' : '/superbuy/import-extension';
+        
+        const payload = {
+            secret: settings.secretKey,
+            items: selectedItems
+        };
+
+        if (isParcelSync && currentParcelData) {
+            payload.parcel = currentParcelData;
+        }
+
+        const response = await fetch(`${settings.dashboardUrl}${endpoint}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                secret: settings.secretKey,
-                items: selected
-            })
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
-
-        if (data.success) {
-            btn.innerText = "✅ Succes!";
-            btn.style.background = "#10b981";
-            document.getElementById('sb-status').innerText = data.message;
-            document.getElementById('sb-status').style.color = "green";
-            setTimeout(closeModal, 2000);
-        } else {
-            throw new Error(data.error || "Server error");
+        const rawText = await response.text();
+        let result;
+        try {
+            result = JSON.parse(rawText);
+        } catch (e) {
+            throw new Error(`Server returned non-JSON: ${rawText.substring(0, 100)}`);
         }
-    } catch (e) {
-        console.error(e);
-        btn.innerText = "❌ Fout";
-        btn.style.background = "#ef4444";
-        alert("Fout bij importeren: " + e.message);
+
+        if (response.ok && result.success) {
+            btn.innerHTML = '<span>✅</span> Gelukt!';
+            btn.style.background = '#059669';
+            setTimeout(() => {
+                closeModal();
+            }, 1000);
+        } else {
+            alert("⚠️ Fout bij importeren: " + (result.error || result.message || "Onbekende fout"));
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error("Netwerk fout:", error);
+        alert(`⚠️ Oeps! Bestaat je domein wel?\n\nFout: ${error.message}\nURL: ${settings.dashboardUrl}`);
+        btn.innerHTML = originalText;
         btn.disabled = false;
     }
+}
+
+// Hulpmethode Sync Storage
+function getSettings() {
+    return new Promise((resolve) => {
+        chrome.storage.sync.get(['dashboardUrl', 'secretKey'], (data) => {
+            resolve(data);
+        });
+    });
 }
