@@ -14,8 +14,9 @@ function attemptInject() {
     const url = window.location.href.toLowerCase();
     const isOrderPage = url.includes('/order') && !url.includes('/parceldetail');
     const isParcelPage = url.includes('/parceldetail') || url.includes('/package/detail') || url.includes('id=pn');
+    const isBuyPage = url.includes('/page/buy') || url.includes('/item');
 
-    if (!isOrderPage && !isParcelPage) return;
+    if (!isOrderPage && !isParcelPage && !isBuyPage) return;
 
     // Reguliere Order Sync Knop
     if (isOrderPage && !document.getElementById('sb-sync-trigger')) {
@@ -79,6 +80,39 @@ function attemptInject() {
             
             document.body.appendChild(pbtn);
         }
+    }
+
+    // Variant Explorer Knop (op buy pagina)
+    if (isBuyPage && !document.getElementById('sb-variant-explorer-trigger')) {
+        const btn = document.createElement('button');
+        btn.id = 'sb-variant-explorer-trigger';
+        btn.innerHTML = `<span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">✨</span> <span style="vertical-align: middle; margin-left: 4px;">Quick Select</span>`;
+        
+        btn.style.cssText = `
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 14px 28px; border-radius: 99px; border: none; font-weight: 700; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.4), 0 4px 6px -2px rgba(245, 158, 11, 0.2); transition: all 0.2s ease; position: fixed; bottom: 90px; right: 30px; z-index: 999999; font-size: 16px; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center;
+        `;
+        const animId = 'sb-bounce-anim';
+        if (!document.getElementById(animId)) {
+            const style = document.createElement('style');
+            style.id = animId;
+            style.innerHTML = `@keyframes sbBounceIn { 0% { opacity: 0; transform: translateY(40px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }`;
+            document.head.appendChild(style);
+        }
+        btn.style.animation = 'sbBounceIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+
+        btn.onmouseover = () => { btn.style.transform = "translateY(-2px) scale(1.05)"; btn.style.boxShadow = "0 15px 25px -5px rgba(245, 158, 11, 0.5)"; };
+        btn.onmouseout = () => { btn.style.transform = "translateY(0) scale(1)"; btn.style.boxShadow = "0 10px 15px -3px rgba(245, 158, 11, 0.4)"; };
+        btn.onclick = () => openVariantExplorer();
+        
+        document.body.appendChild(btn);
+
+        // Keyboard shortcut Alt+V
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey && e.key.toLowerCase() === 'v') {
+                e.preventDefault();
+                openVariantExplorer();
+            }
+        });
     }
 }
 
@@ -701,4 +735,295 @@ function getSettings() {
             resolve(data);
         });
     });
+}
+
+// --- Variant Explorer ---
+
+let explorerState = {
+    isOpen: false,
+    variants: [],
+    currentIndex: 0
+};
+
+function openVariantExplorer() {
+    if (explorerState.isOpen) return;
+    
+    // 1. Zoek naar alle mogelijke variant thumbnails
+    const variantElements = Array.from(document.querySelectorAll('.goods-options dl dd ul li, [class*="sku"] li, .item-list li, .prop-list li, .sku-list li')).filter(el => {
+        return el.querySelector('img') || (el.style && el.style.backgroundImage) || el.classList.contains('img');
+    });
+
+    if (variantElements.length === 0) {
+        alert("Geen productvarianten met foto's gevonden op deze pagina.");
+        return;
+    }
+
+    explorerState.isOpen = true;
+    explorerState.variants = variantElements;
+    explorerState.currentIndex = 0;
+    
+    // Probeer de huidige geselecteerde te vinden
+    const selectedIndex = variantElements.findIndex(el => el.classList.contains('active') || el.classList.contains('selected') || el.classList.contains('tb-selected'));
+    if (selectedIndex !== -1) {
+        explorerState.currentIndex = selectedIndex;
+    }
+
+    // 2. Bouw UI
+    if (!document.getElementById('sb-explorer-styles')) {
+        const style = document.createElement('style');
+        style.id = 'sb-explorer-styles';
+        style.innerHTML = `
+            @keyframes exp-fadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(8px); } }
+            @keyframes exp-scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+            .exp-nav-btn { background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2); color: white; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(4px); }
+            .exp-nav-btn:hover { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.4); transform: scale(1.1); }
+            .exp-nav-btn:active { transform: scale(0.95); }
+            .exp-thumb { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; opacity: 0.5; transition: all 0.2s; cursor: pointer; border: 2px solid transparent; }
+            .exp-thumb:hover { opacity: 0.8; }
+            .exp-thumb.active { opacity: 1; border-color: #f59e0b; transform: scale(1.1); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4); }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sb-explorer-overlay';
+    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.85); z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; animation: exp-fadeIn 0.3s ease-out forwards;";
+    
+    overlay.innerHTML = `
+        <div style="position:absolute; top:24px; right:32px; display:flex; gap:16px; align-items:center;">
+            <div style="color:rgba(255,255,255,0.6); font-family:system-ui; font-size:14px; background:rgba(0,0,0,0.2); padding:8px 16px; border-radius:99px;">
+                <kbd style="background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-family:monospace; margin-right:4px;">←</kbd> <kbd style="background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-family:monospace; margin-right:4px;">→</kbd> Bladeren &nbsp;|&nbsp; 
+                <kbd style="background:#f59e0b; color:white; padding:2px 6px; border-radius:4px; font-family:monospace; margin:0 4px;">Enter</kbd> Selecteren &nbsp;|&nbsp;
+                <kbd style="background:rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-family:monospace; margin:0 4px;">Esc</kbd> Sluiten
+            </div>
+            <button id="exp-close-btn" style="background:none; border:none; color:white; font-size:32px; cursor:pointer; opacity:0.6; padding:0;">&times;</button>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:center; gap:40px; width:100%; max-width:1400px; padding:20px; animation: exp-scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);">
+            <button id="exp-prev-btn" class="exp-nav-btn">❮</button>
+            
+            <div style="display:flex; flex-direction:column; align-items:center; max-width:1400px; width: 100%;">
+                <div style="height:85vh; max-height:1000px; width:100%; display:flex; justify-content:center; align-items:center; position:relative;">
+                    <img id="exp-main-img" src="" style="max-width:100%; max-height:100%; object-fit:contain; filter:drop-shadow(0 15px 25px rgba(0,0,0,0.3)); transition: opacity 0.2s; border-radius:12px;">
+                    <div id="exp-loading" style="position:absolute; width:40px; height:40px; border:4px solid rgba(255,255,255,0.1); border-top-color:#f59e0b; border-radius:50%; animation:spin 1s linear infinite; display:none;"></div>
+                </div>
+                
+                <div style="display:flex; align-items:center; gap: 16px; margin-top: 24px;">
+                    <h3 id="exp-title" style="color:white; font-family:ui-sans-serif, system-ui; font-size:26px; margin:0; font-weight:700; text-align:center; text-shadow:0 2px 4px rgba(0,0,0,0.5);"></h3>
+                    <a id="exp-open-orig" target="_blank" style="background:rgba(255,255,255,0.1); color:white; padding:6px 12px; border-radius:8px; text-decoration:none; font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px; transition:all 0.2s; border:1px solid rgba(255,255,255,0.2);">🔍 Open Origineel</a>
+                </div>
+                
+                <div id="exp-extra-info" style="display:flex; gap:12px; margin:16px 0; min-height: 28px; flex-wrap: wrap; justify-content: center;">
+                    <!-- Stock and sizes will appear here -->
+                </div>
+
+                <p id="exp-counter" style="color:#fbbf24; font-family:monospace; font-size:16px; margin:0; background:rgba(245,158,11,0.1); padding:4px 12px; border-radius:99px; font-weight:600;"></p>
+            </div>
+
+            <button id="exp-next-btn" class="exp-nav-btn">❯</button>
+        </div>
+
+        <div style="margin-top:40px; width:100%; max-width:800px; overflow-x:auto; padding:20px; display:flex; gap:12px; justify-content:center; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);">
+            <div id="exp-thumbs-container" style="display:flex; gap:12px; padding:10px;"></div>
+        </div>
+    `;
+    
+    if (!document.getElementById('sb-spin-anim')) {
+        const style = document.createElement('style');
+        style.id = 'sb-spin-anim';
+        style.innerHTML = `@keyframes spin { to { transform: rotate(360deg); } }`;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(overlay);
+
+    const thumbsContainer = document.getElementById('exp-thumbs-container');
+    explorerState.variants.forEach((el, index) => {
+        let imgSrc = el.querySelector('img') ? el.querySelector('img').src : '';
+        if (!imgSrc && el.style.backgroundImage) {
+            imgSrc = el.style.backgroundImage.slice(4, -1).replace(/["']/g, "");
+        }
+
+        const thumb = document.createElement('img');
+        thumb.src = imgSrc;
+        thumb.className = `exp-thumb ${index === explorerState.currentIndex ? 'active' : ''}`;
+        thumb.dataset.index = index;
+        thumb.onclick = () => updateExplorerView(index);
+        thumbsContainer.appendChild(thumb);
+    });
+
+    document.getElementById('exp-close-btn').onclick = closeVariantExplorer;
+    document.getElementById('exp-prev-btn').onclick = () => updateExplorerView(explorerState.currentIndex - 1);
+    document.getElementById('exp-next-btn').onclick = () => updateExplorerView(explorerState.currentIndex + 1);
+    
+    explorerState.keyHandler = (e) => {
+        if (!explorerState.isOpen) return;
+        if (e.key === 'Escape') closeVariantExplorer();
+        if (e.key === 'ArrowLeft') { e.preventDefault(); updateExplorerView(explorerState.currentIndex - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); updateExplorerView(explorerState.currentIndex + 1); }
+        if (e.key === 'Enter') { 
+            e.preventDefault(); 
+            selectVariantAndClose(); 
+        }
+    };
+    document.addEventListener('keydown', explorerState.keyHandler);
+
+    updateExplorerView(explorerState.currentIndex);
+}
+
+function updateExplorerView(index) {
+    if (index < 0) index = explorerState.variants.length - 1;
+    if (index >= explorerState.variants.length) index = 0;
+    
+    explorerState.currentIndex = index;
+    const el = explorerState.variants[index];
+    
+    let imgSrc = el.querySelector('img') ? el.querySelector('img').src : '';
+    if (!imgSrc && el.style.backgroundImage) {
+        imgSrc = el.style.backgroundImage.slice(4, -1).replace(/["']/g, "");
+    }
+    
+    let highResSrc = imgSrc;
+    if (highResSrc) {
+        // Verwijder resolutie suffixes zoals _50x50.jpg, .60x60.jpg, _60x60q90.jpg, _400x400.jpg, etc.
+        highResSrc = highResSrc.replace(/[_\.]\d+x\d+.*$/i, '');
+        
+        // Verwijder .jpg_Q90.jpg achtige dubbele extensies
+        if (highResSrc.endsWith('.jpg_')) highResSrc = highResSrc.substring(0, highResSrc.length - 5) + '.jpg';
+        
+        // Verwijder Superbuy CDN @50w_50h resizing en eventuele query parameters
+        highResSrc = highResSrc.replace(/@\d+w_\d+h.*$/i, ''); 
+        highResSrc = highResSrc.split('?')[0];
+        
+        // Zorg dat we een geldige URL hebben (soms is het //cbu01...)
+        if (highResSrc.startsWith('//')) {
+            highResSrc = 'https:' + highResSrc;
+        }
+    }
+
+    let titleText = el.getAttribute('title') || el.innerText.trim();
+    if (!titleText && el.querySelector('span')) titleText = el.querySelector('span').innerText.trim();
+    if (!titleText) titleText = `Variant ${index + 1}`;
+
+    const mainImg = document.getElementById('exp-main-img');
+    const loading = document.getElementById('exp-loading');
+    const openOrig = document.getElementById('exp-open-orig');
+    
+    mainImg.style.opacity = '0';
+    loading.style.display = 'block';
+
+    const tempImg = new Image();
+    tempImg.onload = () => {
+        mainImg.src = highResSrc || imgSrc;
+        openOrig.href = highResSrc || imgSrc;
+        mainImg.style.opacity = '1';
+        loading.style.display = 'none';
+    };
+    tempImg.onerror = () => {
+        mainImg.src = imgSrc;
+        openOrig.href = imgSrc;
+        mainImg.style.opacity = '1';
+        loading.style.display = 'none';
+    };
+    tempImg.src = highResSrc || imgSrc;
+
+    document.getElementById('exp-title').innerText = titleText;
+    document.getElementById('exp-counter').innerText = `${index + 1} / ${explorerState.variants.length}`;
+
+    document.querySelectorAll('.exp-thumb').forEach((thumb, i) => {
+        if (i === index) {
+            thumb.classList.add('active');
+            thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        } else {
+            thumb.classList.remove('active');
+        }
+    });
+
+    const clickable = el.querySelector('a') || el;
+    clickable.click();
+
+    // Wacht even tot de pagina reageert op de klik, en haal dan info op (gebruik een iets langere timeout ivm AJAX)
+    setTimeout(() => {
+        if (!explorerState.isOpen || explorerState.currentIndex !== index) return;
+
+        // Zoek naar maten. Op superbuy zijn dit vaak '.item-sku-list span', '.goods-sku li', of soortgelijke opties.
+        // We zoeken elementen die "selected" of "active" zijn in de andere optie-rijen (niet de image rij)
+        const allSelectedOptions = Array.from(document.querySelectorAll('.goods-options .active, .goods-options .selected, .goods-options .tb-selected, .sku-list .active, .item-list .selected, [class*="sku"] .active, .item-sku-list .active'));
+        
+        let sizes = allSelectedOptions.map(el => {
+            return el.innerText.replace(/[\uE000-\uF8FF]/g, '').trim();
+        }).filter(t => t && t.length > 0 && t.length < 30).join(', ');
+
+        // Als er geen specifiek geselecteerde zijn, toon dan alle beschikbare (niet-disabled) opties in de tekst (zonder plaatje)
+        if (!sizes) {
+            const sizeEls = Array.from(document.querySelectorAll('.goods-options dl dd ul li, [class*="sku"] li, .item-list li, .prop-list li, .sku-list li, .item-sku-list span')).filter(li => {
+                return !li.querySelector('img') && !li.style.backgroundImage && !li.classList.contains('img') && 
+                       !li.classList.contains('disabled') && !li.classList.contains('out-of-stock');
+            });
+            sizes = sizeEls.map(li => {
+                return li.innerText.replace(/[\uE000-\uF8FF]/g, '').trim();
+            }).filter(t => t && t.length < 30).join(', ');
+        }
+        
+        if (sizes.length > 80) sizes = sizes.substring(0, 80) + '...';
+
+        // Zoek naar voorraad / stock
+        let stockText = "";
+        
+        // Superbuy specifieke locaties voor stock
+        const stockInput = document.querySelector('.goods-quantity input, .quantity input, input[type="number"], .add-cart-num input');
+        const maxStockAttr = stockInput ? (stockInput.getAttribute('max') || stockInput.getAttribute('data-max')) : null;
+        
+        if (maxStockAttr && maxStockAttr !== "99999") {
+            stockText = maxStockAttr;
+        } else {
+            const allTexts = Array.from(document.querySelectorAll('span, em, div, label, p, font, b'));
+            const stockEls = allTexts.filter(s => {
+                const t = s.innerText.toLowerCase();
+                return (t.includes('in stock') || t.includes('inventory') || t.includes('available') || t.includes('piece') || t.includes('left')) 
+                        && /\d+/.test(t) && t.length < 40 && !t.includes('price');
+            });
+            
+            stockEls.sort((a, b) => a.innerText.length - b.innerText.length);
+            stockText = stockEls.length > 0 ? stockEls[0].innerText.replace(/[\n\r]/g, ' ').trim() : "";
+        }
+        
+        if (stockText && stockText.length > 40) stockText = stockText.substring(0, 40);
+
+        const extraInfoEl = document.getElementById('exp-extra-info');
+        if (extraInfoEl) {
+            extraInfoEl.innerHTML = `
+                ${stockText ? `<span style="background:rgba(16,185,129,0.2); color:#34d399; padding:6px 16px; border-radius:6px; font-size:16px; font-weight:600; border:1px solid rgba(16,185,129,0.3);">📦 Voorraad: ${stockText.replace(/[-+]/g, '').trim()}</span>` : ''}
+                ${sizes ? `<span style="background:rgba(59,130,246,0.2); color:#60a5fa; padding:6px 16px; border-radius:6px; font-size:16px; font-weight:600; border:1px solid rgba(59,130,246,0.3);">📏 ${sizes}</span>` : ''}
+            `;
+        }
+    }, 400);
+}
+
+function selectVariantAndClose() {
+    if (!explorerState.isOpen) return;
+    
+    const el = explorerState.variants[explorerState.currentIndex];
+    if (el) {
+        // Hij is op de achtergrond al geklikt, dus we doen alleen nog de UI animatie!
+        
+        document.getElementById('exp-main-img').style.transform = 'scale(1.1)';
+        document.getElementById('exp-main-img').style.filter = 'drop-shadow(0 0 40px #10b981) brightness(1.2)';
+        document.getElementById('exp-title').style.color = '#10b981';
+        document.getElementById('exp-title').innerText = `Geselecteerd: ${document.getElementById('exp-title').innerText} ✔️`;
+        
+        setTimeout(() => {
+            closeVariantExplorer();
+        }, 300);
+    } else {
+        closeVariantExplorer();
+    }
+}
+
+function closeVariantExplorer() {
+    const overlay = document.getElementById('sb-explorer-overlay');
+    if (overlay) overlay.remove();
+    document.removeEventListener('keydown', explorerState.keyHandler);
+    explorerState.isOpen = false;
+    explorerState.variants = [];
 }

@@ -1,10 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Superbuy Reseller Sync",
-  "version": "2.3",
-  "description": "Sync Superbuy orders naar Dashboard",
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["*://*.superbuy.com/*"],
+  "version": "2.5",
+  "description": "Sync Superbuy orders naar Dashboard + Spreadsheet Image Extractor",
+  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
+  "host_permissions": [
+    "*://*.superbuy.com/*",
+    "*://docs.google.com/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -23,6 +26,12 @@
       "matches": ["*://*.superbuy.com/*"],
       "js": ["content.js"],
       "run_at": "document_end"
+    },
+    {
+      "matches": ["*://docs.google.com/spreadsheets/*"],
+      "js": ["sheets.js"],
+      "run_at": "document_end",
+      "all_frames": true
     }
   ]
 }
