@@ -2,7 +2,7 @@
 console.log("[Reseller Pro] UUFinds automation script loaded");
 
 function triggerUpload(file) {
-    console.log("[Reseller Pro] Simulating Ctrl+V (paste) on UUFinds...");
+    console.log("[Reseller Pro] Attempting to auto-upload to Vue/React SPA...");
     
     // Banner tonen
     const banner = document.createElement('div');
@@ -18,27 +18,37 @@ function triggerUpload(file) {
     
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
+
+    // Methode 1: Native Setter op de file input (werkt voor Vue/React)
+    const fileInputs = document.querySelectorAll('input[type="file"]');
+    if (fileInputs.length > 0) {
+        console.log("[Reseller Pro] Found file input, triggering native setter...");
+        const input = fileInputs[0];
+        
+        // Gebruik de native setter om framework overrides te omzeilen
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "files").set;
+        if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(input, dataTransfer.files);
+        } else {
+            input.files = dataTransfer.files;
+        }
+        
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }
     
-    const pasteEvent = new ClipboardEvent('paste', {
-        clipboardData: dataTransfer,
-        bubbles: true,
-        cancelable: true
-    });
-    
-    // Dispatch op document, window en actieve element
+    // Methode 2: Fallback paste en drop events
+    console.log("[Reseller Pro] No file input found yet, simulating paste/drop...");
+    const pasteEvent = new ClipboardEvent('paste', { clipboardData: dataTransfer, bubbles: true, cancelable: true });
     document.dispatchEvent(pasteEvent);
     if (document.activeElement) document.activeElement.dispatchEvent(pasteEvent);
     window.dispatchEvent(pasteEvent);
     
-    // Fallback: zoek file input als paste niet werkt
-    const fileInputs = document.querySelectorAll('input[type="file"]');
-    if (fileInputs.length > 0) {
-        fileInputs[0].files = dataTransfer.files;
-        fileInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-        console.log("[Reseller Pro] Upload triggered via file input fallback");
-    }
+    const dropEvent = new DragEvent('drop', { dataTransfer: dataTransfer, bubbles: true, cancelable: true });
+    document.dispatchEvent(dropEvent);
     
-    return true;
+    return false; // Geef false terug zodat setInterval het nog eens probeert
 }
 
 chrome.storage.local.get(['pendingImageSearch'], (data) => {
@@ -56,10 +66,14 @@ chrome.storage.local.get(['pendingImageSearch'], (data) => {
             .then(blob => {
                 const file = new File([blob], "reseller-pro-search.png", { type: "image/png" });
                 
-                // UUFinds gebruikt Vue. We wachten even tot de app volledig is geïnitialiseerd.
-                setTimeout(() => {
-                    triggerUpload(file);
-                }, 1500);
+                // UUFinds gebruikt Vue. We zoeken tot 10 seconden lang naar de file input.
+                const tryUpload = setInterval(() => {
+                    if (triggerUpload(file)) {
+                        clearInterval(tryUpload);
+                    }
+                }, 500);
+
+                setTimeout(() => clearInterval(tryUpload), 10000);
             })
             .catch(err => console.error("[Reseller Pro] Error converting base64 to file", err));
     }
