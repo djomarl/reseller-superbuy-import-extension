@@ -4,6 +4,18 @@ console.log("[Reseller Pro] UUFinds automation script loaded");
 function triggerUpload(file) {
     console.log("[Reseller Pro] Simulating Ctrl+V (paste) on UUFinds...");
     
+    // Banner tonen
+    const banner = document.createElement('div');
+    banner.innerText = "🚀 Reseller Pro: Auto-searching your image...";
+    Object.assign(banner.style, {
+        position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+        background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white',
+        padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', zIndex: '999999',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontFamily: 'sans-serif'
+    });
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 4000);
+    
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(file);
     
@@ -13,9 +25,10 @@ function triggerUpload(file) {
         cancelable: true
     });
     
-    // Dispatch op document en body
+    // Dispatch op document, window en actieve element
     document.dispatchEvent(pasteEvent);
-    document.body.dispatchEvent(pasteEvent);
+    if (document.activeElement) document.activeElement.dispatchEvent(pasteEvent);
+    window.dispatchEvent(pasteEvent);
     
     // Fallback: zoek file input als paste niet werkt
     const fileInputs = document.querySelectorAll('input[type="file"]');

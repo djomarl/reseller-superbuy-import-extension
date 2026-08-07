@@ -260,6 +260,12 @@
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
                     chrome.storage.local.set({ pendingImageSearch: reader.result }, () => {
+                        if (chrome.runtime.lastError) {
+                            console.error('[Reseller Pro] Storage error:', chrome.runtime.lastError);
+                            showToast('❌ Auto-search failed (Image too large)', true);
+                            window.open('https://uufinds.com/', '_blank');
+                            return;
+                        }
                         // Daarna openen we uufinds of een ander platform
                         setTimeout(() => {
                             let urlToOpen = 'https://uufinds.com/';

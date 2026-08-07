@@ -3,7 +3,7 @@
   "name": "Superbuy Reseller Sync",
   "version": "2.5",
   "description": "Sync Superbuy orders naar Dashboard + Spreadsheet Image Extractor",
-  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
+  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite", "unlimitedStorage"],
   "host_permissions": [
     "*://*.superbuy.com/*",
     "*://docs.google.com/*"
