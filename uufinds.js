@@ -2,25 +2,30 @@
 console.log("[Reseller Pro] UUFinds automation script loaded");
 
 function triggerUpload(file) {
-    // Zoek naar alle file inputs
-    const fileInputs = document.querySelectorAll('input[type="file"]');
+    console.log("[Reseller Pro] Simulating Ctrl+V (paste) on UUFinds...");
     
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    
+    const pasteEvent = new ClipboardEvent('paste', {
+        clipboardData: dataTransfer,
+        bubbles: true,
+        cancelable: true
+    });
+    
+    // Dispatch op document en body
+    document.dispatchEvent(pasteEvent);
+    document.body.dispatchEvent(pasteEvent);
+    
+    // Fallback: zoek file input als paste niet werkt
+    const fileInputs = document.querySelectorAll('input[type="file"]');
     if (fileInputs.length > 0) {
-        console.log("[Reseller Pro] Found file input(s)", fileInputs);
-        
-        // UUFinds heeft wss 1 main file input voor image search
-        const targetInput = fileInputs[0];
-        
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        
-        targetInput.files = dataTransfer.files;
-        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-        console.log("[Reseller Pro] Upload triggered via input change!");
-        return true;
+        fileInputs[0].files = dataTransfer.files;
+        fileInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
+        console.log("[Reseller Pro] Upload triggered via file input fallback");
     }
     
-    return false;
+    return true;
 }
 
 chrome.storage.local.get(['pendingImageSearch'], (data) => {
@@ -38,16 +43,10 @@ chrome.storage.local.get(['pendingImageSearch'], (data) => {
             .then(blob => {
                 const file = new File([blob], "reseller-pro-search.png", { type: "image/png" });
                 
-                // UUFinds gebruikt waarschijnlijk een framework zoals Vue/React.
-                // We wachten even tot de DOM volledig is opgebouwd.
-                const tryUpload = setInterval(() => {
-                    if (triggerUpload(file)) {
-                        clearInterval(tryUpload);
-                    }
-                }, 500);
-
-                // Stop na 10 seconden
-                setTimeout(() => clearInterval(tryUpload), 10000);
+                // UUFinds gebruikt Vue. We wachten even tot de app volledig is geïnitialiseerd.
+                setTimeout(() => {
+                    triggerUpload(file);
+                }, 1500);
             })
             .catch(err => console.error("[Reseller Pro] Error converting base64 to file", err));
     }
