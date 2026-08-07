@@ -253,27 +253,34 @@
                 }
 
                 await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                showToast('✅ Copied! Press Ctrl+V on UUFinds');
+                showToast('✅ Auto-searching...');
                 
-            // Daarna openen we uufinds of een ander platform
-            setTimeout(() => {
-                let urlToOpen = 'https://uufinds.com/';
-                
-                if (window.rpDefaultSearchEngine === 'taobao') {
-                    urlToOpen = `https://s.taobao.com/search?q=&imgfile=&js=1&stats_click=search_radio_all%3A1&initiative_id=staobaoz_20230221&ie=utf8&tfsid=&app=imgsearch&imageUrl=${encodeURIComponent(highRes)}`;
-                } else if (window.rpDefaultSearchEngine === '1688') {
-                    urlToOpen = `https://s.1688.com/youyuan/index.htm?tab=imageSearch&imageAddress=${encodeURIComponent(highRes)}`;
-                } else if (window.rpDefaultSearchEngine === 'google_lens') {
-                    urlToOpen = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(highRes)}`;
-                }
-                
-                window.open(urlToOpen, '_blank');
-            }, 800);
-        } catch (err) {
-            console.error('[Reseller Pro] Copy failed:', err);
-            showToast('❌ Copy failed', true);
-            window.open('https://uufinds.com/', '_blank');
-        }
+                // Converteer naar base64 voor automatische upload op uufinds
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = () => {
+                    chrome.storage.local.set({ pendingImageSearch: reader.result }, () => {
+                        // Daarna openen we uufinds of een ander platform
+                        setTimeout(() => {
+                            let urlToOpen = 'https://uufinds.com/';
+                            
+                            if (window.rpDefaultSearchEngine === 'taobao') {
+                                urlToOpen = `https://s.taobao.com/search?q=&imgfile=&js=1&stats_click=search_radio_all%3A1&initiative_id=staobaoz_20230221&ie=utf8&tfsid=&app=imgsearch&imageUrl=${encodeURIComponent(highRes)}`;
+                            } else if (window.rpDefaultSearchEngine === '1688') {
+                                urlToOpen = `https://s.1688.com/youyuan/index.htm?tab=imageSearch&imageAddress=${encodeURIComponent(highRes)}`;
+                            } else if (window.rpDefaultSearchEngine === 'google_lens') {
+                                urlToOpen = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(highRes)}`;
+                            }
+                            
+                            window.open(urlToOpen, '_blank');
+                        }, 500);
+                    });
+                };
+            } catch (err) {
+                console.error('[Reseller Pro] Copy failed:', err);
+                showToast('❌ Auto-search failed', true);
+                window.open('https://uufinds.com/', '_blank');
+            }
             
             uufindsBtn.innerText = origText;
             hideActionBar();

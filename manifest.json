@@ -33,6 +33,11 @@
       "js": ["sheets.js"],
       "run_at": "document_end",
       "all_frames": true
+    },
+    {
+      "matches": ["*://*.uufinds.com/*"],
+      "js": ["uufinds.js"],
+      "run_at": "document_end"
     }
   ]
 }
