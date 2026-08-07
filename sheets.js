@@ -114,32 +114,134 @@
     }
 
     function setupClickToCopy() {
-        document.addEventListener('click', async (e) => {
-            const img = e.target;
-            if (img.tagName !== 'IMG') return;
-            
-            const src = img.getAttribute('src') || '';
-            if (!src) return;
-            
-            // Skip Google UI icons
-            if (src.includes('ssl.gstatic.com') || src.includes('www.gstatic.com') || src.includes('/favicon')) return;
-            // Skip tiny spacer images
-            if (src.startsWith('data:') && src.length < 500) return;
+        // Maak het zwevende actiemenu
+        const actionBar = document.createElement('div');
+        actionBar.id = 'rp-action-bar';
+        Object.assign(actionBar.style, {
+            position: 'absolute',
+            display: 'none',
+            gap: '8px',
+            background: 'rgba(15, 23, 42, 0.9)',
+            padding: '6px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+            zIndex: '99999999',
+            backdropFilter: 'blur(4px)',
+            pointerEvents: 'auto',
+            animation: 'rp-fadeIn 0.2s ease-out'
+        });
 
+        const copyBtn = document.createElement('button');
+        copyBtn.innerText = '📋 Copy';
+        
+        const uufindsBtn = document.createElement('button');
+        
+        let engineName = 'UUFinds';
+        if (window.rpDefaultSearchEngine === 'taobao') engineName = 'Taobao';
+        else if (window.rpDefaultSearchEngine === '1688') engineName = '1688';
+        else if (window.rpDefaultSearchEngine === 'google_lens') engineName = 'Google Lens';
+        
+        uufindsBtn.innerText = `🔍 ${engineName}`;
+        uufindsBtn.title = `Reverse Image Search on ${engineName}`;
+        
+        [copyBtn, uufindsBtn].forEach(btn => {
+            Object.assign(btn.style, {
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontSize: '12px',
+                fontWeight: '600',
+                transition: 'all 0.2s'
+            });
+            btn.onmouseover = () => btn.style.background = '#3b82f6';
+            btn.onmouseout = () => btn.style.background = 'rgba(255,255,255,0.1)';
+        });
+        
+        uufindsBtn.onmouseover = () => uufindsBtn.style.background = '#8b5cf6';
+        uufindsBtn.onmouseout = () => uufindsBtn.style.background = 'rgba(255,255,255,0.1)';
+
+        actionBar.appendChild(copyBtn);
+        actionBar.appendChild(uufindsBtn);
+        document.body.appendChild(actionBar);
+
+        // State voor de hover
+        let currentTargetImg = null;
+        let hideTimeout = null;
+
+        function showActionBar(img) {
+            clearTimeout(hideTimeout);
+            currentTargetImg = img;
+            
+            const rect = img.getBoundingClientRect();
+            
+            // Zet de action bar in de top-right hoek van de afbeelding (rekening houdend met scroll)
+            actionBar.style.top = (rect.top + window.scrollY + 8) + 'px';
+            actionBar.style.left = (rect.right + window.scrollX - actionBar.offsetWidth - 8) + 'px';
+            actionBar.style.display = 'flex';
+            
+            // Zorg dat hij niet buiten het scherm valt links
+            if (parseFloat(actionBar.style.left) < 0) {
+                actionBar.style.left = (rect.left + window.scrollX + 8) + 'px';
+            }
+        }
+
+        function hideActionBar() {
+            hideTimeout = setTimeout(() => {
+                actionBar.style.display = 'none';
+                currentTargetImg = null;
+            }, 100);
+        }
+
+        // Mouse events op het hele document vangen (event delegation)
+        document.addEventListener('mouseover', (e) => {
+            if (e.target.tagName === 'IMG' && e.target.closest('td')) {
+                const src = e.target.getAttribute('src') || '';
+                if (!src || src.includes('ssl.gstatic.com') || (src.startsWith('data:') && src.length < 500)) return;
+                
+                // Zorg dat actie balk eerst in DOM gerenderd is voor offsetWidth
+                actionBar.style.display = 'flex'; 
+                actionBar.style.opacity = '0'; // verberg even tijdens berekenen
+                
+                setTimeout(() => {
+                    showActionBar(e.target);
+                    actionBar.style.opacity = '1';
+                }, 10);
+            }
+        }, true);
+
+        document.addEventListener('mouseout', (e) => {
+            if (e.target.tagName === 'IMG' && e.target.closest('td')) {
+                hideActionBar();
+            }
+        }, true);
+
+        // Hou menu open als we erover hoveren
+        actionBar.addEventListener('mouseover', () => clearTimeout(hideTimeout));
+        actionBar.addEventListener('mouseleave', hideActionBar);
+
+        // UUFINDS KLIK ACTIE
+        uufindsBtn.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation();
-
+            if (!currentTargetImg) return;
+            
+            const src = currentTargetImg.getAttribute('src');
             const highRes = getHighResUrl(src);
-            showToast('⏳ Copying image...');
+            
+            showToast('⏳ Copying for UUFinds...');
+            const origText = uufindsBtn.innerText;
+            uufindsBtn.innerText = '⏳...';
 
             try {
+                // Eerst de image kopiëren naar klembord
                 const response = await fetch(highRes, { credentials: 'include' });
-                if (!response.ok) throw new Error('Fetch failed: ' + response.status);
-                
+                if (!response.ok) throw new Error('Fetch failed');
                 let blob = await response.blob();
 
-                // Clipboard API vereist image/png
                 if (blob.type !== 'image/png') {
                     const bitmap = await createImageBitmap(blob);
                     const canvas = document.createElement('canvas');
@@ -150,17 +252,80 @@
                     blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                 }
 
-                await navigator.clipboard.write([
-                    new ClipboardItem({ 'image/png': blob })
-                ]);
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                showToast('✅ Copied! Press Ctrl+V on UUFinds');
                 
+            // Daarna openen we uufinds of een ander platform
+            setTimeout(() => {
+                let urlToOpen = 'https://uufinds.com/';
+                
+                if (window.rpDefaultSearchEngine === 'taobao') {
+                    urlToOpen = `https://s.taobao.com/search?q=&imgfile=&js=1&stats_click=search_radio_all%3A1&initiative_id=staobaoz_20230221&ie=utf8&tfsid=&app=imgsearch&imageUrl=${encodeURIComponent(highRes)}`;
+                } else if (window.rpDefaultSearchEngine === '1688') {
+                    urlToOpen = `https://s.1688.com/youyuan/index.htm?tab=imageSearch&imageAddress=${encodeURIComponent(highRes)}`;
+                } else if (window.rpDefaultSearchEngine === 'google_lens') {
+                    urlToOpen = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(highRes)}`;
+                }
+                
+                window.open(urlToOpen, '_blank');
+            }, 800);
+        } catch (err) {
+            console.error('[Reseller Pro] Copy failed:', err);
+            showToast('❌ Copy failed', true);
+            window.open('https://uufinds.com/', '_blank');
+        }
+            
+            uufindsBtn.innerText = origText;
+            hideActionBar();
+        };
+
+        // COPY KLIK ACTIE
+        copyBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!currentTargetImg) return;
+            
+            const src = currentTargetImg.getAttribute('src');
+            const highRes = getHighResUrl(src);
+            
+            showToast('⏳ Copying image...');
+            const origText = copyBtn.innerText;
+            copyBtn.innerText = '⏳...';
+
+            try {
+                const response = await fetch(highRes, { credentials: 'include' });
+                if (!response.ok) throw new Error('Fetch failed');
+                let blob = await response.blob();
+
+                if (blob.type !== 'image/png') {
+                    const bitmap = await createImageBitmap(blob);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(bitmap, 0, 0);
+                    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                }
+
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
                 showToast('✅ Image copied to clipboard!');
             } catch (err) {
                 console.error('[Reseller Pro] Copy failed:', err);
                 showToast('❌ Copy failed — opening in new tab', true);
                 window.open(highRes, '_blank');
             }
-        }, true); // useCapture = true, zodat we VOOR Google's handlers zitten
+            
+            copyBtn.innerText = origText;
+            hideActionBar();
+        };
+
+        // Zorg dat we pointer-events op td's ook niet blokkeren, anders werkt mouseover soms niet
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes rp-fadeIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+            td img { pointer-events: auto !important; }
+        `;
+        document.head.appendChild(style);
     }
 
     // === STAP 5: Banner op /edit pagina ===
@@ -224,11 +389,41 @@
     // === INIT ===
 
     function init() {
-        console.log('[Reseller Pro] Initializing on frame:', window === window.top ? 'TOP' : 'IFRAME');
-        removeBlockades();
-        injectStyles();
-        setupClickToCopy();
-        showBannerIfNeeded();
+        chrome.storage.sync.get({
+            enableSheetTools: true,
+            enableAutoRedirect: true,
+            defaultSearchEngine: 'uufinds'
+        }, (settings) => {
+            console.log('[Reseller Pro] Initializing on frame:', window === window.top ? 'TOP' : 'IFRAME', settings);
+            
+            window.rpDefaultSearchEngine = settings.defaultSearchEngine;
+
+            if (settings.enableSheetTools) {
+                removeBlockades();
+                injectStyles();
+                setupClickToCopy();
+            }
+            
+            if (settings.enableAutoRedirect) {
+                showBannerIfNeeded();
+            }
+            
+            // Mutation observer voor blockades alleen als sheet tools aan staan
+            if (settings.enableSheetTools) {
+                const mo = new MutationObserver(() => {
+                    if (document.body.classList.contains('docsshared-disable-image-copy')) {
+                        removeBlockades();
+                    }
+                });
+                if (document.body) {
+                    mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                } else {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                    });
+                }
+            }
+        });
     }
 
     // Run zodra DOM klaar is
@@ -238,18 +433,6 @@
         init();
     }
 
-    // Blijf blokkades verwijderen als Google ze opnieuw toevoegt
-    const mo = new MutationObserver(() => {
-        if (document.body.classList.contains('docsshared-disable-image-copy')) {
-            removeBlockades();
-        }
-    });
-    if (document.body) {
-        mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    } else {
-        document.addEventListener('DOMContentLoaded', () => {
-            mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-        });
-    }
+    // De oude mutation observer was hier; we hebben hem nu in init() gezet afhankelijk van instellingen.
 
 })();

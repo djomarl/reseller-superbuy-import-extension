@@ -3,12 +3,17 @@ let isParcelSync = false;
 let scannedItems = [];
 let currentParcelData = null;
 
-// 1. Start de knop injectie
-window.addEventListener('load', () => attemptInject());
-const observer = new MutationObserver(() => {
-    attemptInject();
+let enableSuperbuyExplorer = true;
+
+// 1. Start de knop injectie en haal settings op
+chrome.storage.sync.get({ enableSuperbuyExplorer: true }, (items) => {
+    enableSuperbuyExplorer = items.enableSuperbuyExplorer;
+    window.addEventListener('load', () => attemptInject());
+    const observer = new MutationObserver(() => {
+        attemptInject();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 });
-observer.observe(document.body, { childList: true, subtree: true });
 
 function attemptInject() {
     const url = window.location.href.toLowerCase();
@@ -83,7 +88,7 @@ function attemptInject() {
     }
 
     // Variant Explorer Knop (op buy pagina)
-    if (isBuyPage && !document.getElementById('sb-variant-explorer-trigger')) {
+    if (isBuyPage && enableSuperbuyExplorer && !document.getElementById('sb-variant-explorer-trigger')) {
         const btn = document.createElement('button');
         btn.id = 'sb-variant-explorer-trigger';
         btn.innerHTML = `<span style="font-size: 1.2em; display: inline-block; vertical-align: middle;">✨</span> <span style="vertical-align: middle; margin-left: 4px;">Quick Select</span>`;
